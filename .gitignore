@@ -4,6 +4,8 @@
 /*/cache/
 # terra-labs: the student's working copy, created by ./lab start (contains its own .git)
 /terra-labs/workspace/
+# swarm-lab: stack files for the current scenario, created by ./lab start
+/swarm-lab/workspace/
 
 # Terraform / Terragrunt runtime artefacts (if a lab is run in place)
 # Do NOT ignore *.tfvars or override.tf: the scenarios ship them as fixtures.
