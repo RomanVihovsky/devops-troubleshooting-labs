@@ -1,0 +1,8 @@
+id: C04
+title: Replacing the app fails - container name already in use
+kind: incident
+level: 2
+domain: language
+needs: [docker]
+wave: 1
+est: 15m

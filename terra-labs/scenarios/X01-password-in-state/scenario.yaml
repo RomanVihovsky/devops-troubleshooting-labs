@@ -1,0 +1,8 @@
+id: X01
+title: Security finding - DB master password readable in Terraform state
+kind: incident
+level: 2
+domain: security
+needs: [moto]
+wave: 1
+est: 15m

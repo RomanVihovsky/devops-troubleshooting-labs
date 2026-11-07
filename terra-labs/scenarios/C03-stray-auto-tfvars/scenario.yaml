@@ -1,0 +1,8 @@
+id: C03
+title: Staging apply created prod-* resources
+kind: incident
+level: 1
+domain: language
+needs: [moto]
+wave: 1
+est: 10m

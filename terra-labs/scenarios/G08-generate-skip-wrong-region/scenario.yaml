@@ -1,0 +1,8 @@
+id: G08
+title: Resources land in us-east-1 although env.hcl says eu-central-1
+kind: incident
+level: 2
+domain: terragrunt
+needs: [moto]
+wave: 1
+est: 15m

@@ -1,0 +1,8 @@
+id: C02
+title: Error Cycle after adding one security group rule
+kind: incident
+level: 2
+domain: language
+needs: [moto]
+wave: 1
+est: 15m

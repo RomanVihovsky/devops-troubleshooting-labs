@@ -1,0 +1,7 @@
+id: L12
+title: Terragrunt Stacks
+kind: learn
+level: 2
+domain: terragrunt
+needs: [moto]
+est: 30m

@@ -1,0 +1,7 @@
+id: L04
+title: Remote state on S3 with native locking
+kind: learn
+level: 1
+domain: state
+needs: [moto]
+est: 25m

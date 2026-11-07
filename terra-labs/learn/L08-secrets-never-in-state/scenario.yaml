@@ -1,0 +1,7 @@
+id: L08
+title: Secrets that never touch state
+kind: learn
+level: 2
+domain: security
+needs: [moto]
+est: 25m

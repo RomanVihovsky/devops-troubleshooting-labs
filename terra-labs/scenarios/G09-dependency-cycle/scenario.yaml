@@ -1,0 +1,8 @@
+id: G09
+title: run --all fails - dependency cycle
+kind: incident
+level: 2
+domain: terragrunt
+needs: [moto]
+wave: 1
+est: 20m

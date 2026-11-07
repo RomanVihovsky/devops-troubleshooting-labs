@@ -1,0 +1,7 @@
+id: L06
+title: Import, generate config, removed
+kind: learn
+level: 2
+domain: refactoring
+needs: [moto]
+est: 25m

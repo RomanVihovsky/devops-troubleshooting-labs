@@ -1,0 +1,7 @@
+id: L07
+title: Lifecycle rules and conditions
+kind: learn
+level: 2
+domain: language
+needs: [moto, docker]
+est: 30m

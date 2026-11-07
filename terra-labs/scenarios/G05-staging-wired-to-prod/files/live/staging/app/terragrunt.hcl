@@ -1,0 +1,22 @@
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+terraform {
+  source = "../../../modules//app"
+}
+
+dependency "network" {
+  config_path = "../../prod/network"
+  mock_outputs = {
+    vpc_id    = "vpc-00000000"
+    subnet_id = "subnet-00000000"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+}
+
+inputs = {
+  vpc_id      = dependency.network.outputs.vpc_id
+  subnet_id   = dependency.network.outputs.subnet_id
+  bucket_name = "none"
+}

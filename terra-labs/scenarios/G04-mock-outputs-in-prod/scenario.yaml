@@ -1,0 +1,8 @@
+id: G04
+title: Uploads fail in prod - NoSuchBucket "mock-uploads-bucket"
+kind: incident
+level: 2
+domain: terragrunt
+needs: [moto]
+wave: 1
+est: 15m

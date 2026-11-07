@@ -1,0 +1,8 @@
+id: M03
+title: Team B's pipeline broke after our release - Unsupported attribute
+kind: incident
+level: 2
+domain: modules
+needs: [moto]
+wave: 1
+est: 15m

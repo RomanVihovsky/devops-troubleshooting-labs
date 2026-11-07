@@ -1,0 +1,8 @@
+id: D05
+title: Handing a bucket to another team would delete it
+kind: incident
+level: 1
+domain: refactoring
+needs: [moto]
+wave: 1
+est: 10m

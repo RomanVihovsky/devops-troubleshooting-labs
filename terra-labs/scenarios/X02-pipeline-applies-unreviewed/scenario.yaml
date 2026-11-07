@@ -1,0 +1,8 @@
+id: X02
+title: The pipeline applied a change nobody reviewed
+kind: incident
+level: 2
+domain: pipeline
+needs: [moto]
+wave: 1
+est: 15m

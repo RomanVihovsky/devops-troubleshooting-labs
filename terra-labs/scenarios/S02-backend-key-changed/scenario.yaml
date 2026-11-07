@@ -1,0 +1,8 @@
+id: S02
+title: After a backend tidy-up plan wants to create everything
+kind: incident
+level: 1
+domain: state
+needs: [moto]
+wave: 1
+est: 10m

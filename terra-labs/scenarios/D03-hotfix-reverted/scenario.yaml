@@ -1,0 +1,8 @@
+id: D03
+title: The nightly apply reverted ops' 3 a.m. hotfix
+kind: incident
+level: 2
+domain: drift
+needs: [moto]
+wave: 1
+est: 15m

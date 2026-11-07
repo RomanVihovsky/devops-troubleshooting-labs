@@ -1,0 +1,7 @@
+id: L14
+title: A pipeline that deserves trust
+kind: learn
+level: 3
+domain: pipeline
+needs: [moto]
+est: 40m

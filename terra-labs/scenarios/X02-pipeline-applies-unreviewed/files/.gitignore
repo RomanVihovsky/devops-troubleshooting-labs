@@ -1,0 +1,4 @@
+artifacts/
+.terraform/
+*.tfstate
+*.tfstate.*

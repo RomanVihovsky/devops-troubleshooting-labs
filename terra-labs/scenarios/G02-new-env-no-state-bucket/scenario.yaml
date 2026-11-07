@@ -1,0 +1,8 @@
+id: G02
+title: New environment - init fails with NoSuchBucket
+kind: incident
+level: 1
+domain: terragrunt
+needs: [moto]
+wave: 1
+est: 10m

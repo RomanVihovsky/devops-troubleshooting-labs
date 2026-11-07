@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+# terra-labs - modern Terraform + Terragrunt: a guided learn track and break/fix incidents.
+# Run `./lab help` for usage.
+set -euo pipefail
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$LAB_DIR/lib/common.sh"
+# shellcheck source=lib/tf.sh
+source "$LAB_DIR/lib/tf.sh"
+# shellcheck source=lib/fetch.sh
+source "$LAB_DIR/lib/fetch.sh"
+lab_env
+
+usage() {
+  cat <<EOF
+${C_BOLD}terra-labs${C_0} - Terraform ${TERRAFORM_VERSION} + Terragrunt ${TERRAGRUNT_VERSION}, offline, no cloud account
+
+  ./lab build                 once: pinned binaries (sha256-checked), moto image, provider mirror (~1 GB download)
+  ./lab doctor                check tools, docker, moto, disk
+  ./lab list [--learn|--incidents|--domain S]   labs (✔ = solved before, ▶ = current)
+  ./lab start <id|random>     fresh workspace + fake AWS, broken on purpose, prints the ticket
+  ./lab ticket                show the current ticket / task again
+  ./lab sh                    shell in workspace/ with terraform, terragrunt, aws (-> moto) wired up
+  ./lab env                   print exports, for your own shell or IDE:  eval "\$(./lab env)"
+  ./lab aws <args>            aws-cli against the lab's fake AWS (moto)
+  ./lab verify                PASS / FAIL - judged on a fresh "CI checkout" of workspace/
+  ./lab hint [n]              next progressive hint (or hint n)
+  ./lab diff                  what you changed since "as found"
+  ./lab solution [-y]         root cause + fix (spoiler)
+  ./lab solve                 apply the reference fix (spoiler)
+  ./lab reset                 start the current lab again from scratch
+  ./lab stop                  remove workspace, scenario containers, wipe fake AWS
+  ./lab status                what's running
+  ./lab up | down             start / remove the moto container
+  ./lab selftest <id..|all|learn|incidents|wave1|wave2>   start -> verify(FAIL) -> solve -> verify(PASS)
+EOF
+}
+
+# ---------------------------------------------------------------- labs ------
+all_labs() {
+  local d
+  for d in "$LEARN_DIR"/*/ "$SCEN_DIR"/*/; do [ -f "$d/scenario.yaml" ] && echo "${d%/}"; done
+}
+yget() { sed -n "s/^$1: *//p" "$2/scenario.yaml" | head -1; }
+lab_dir() {
+  local id=$1 d u
+  for d in "$LEARN_DIR/$id" "$SCEN_DIR/$id"; do [ -d "$d" ] && { echo "$d"; return; }; done
+  u=${id^^}
+  for d in "$LEARN_DIR/$u"-* "$SCEN_DIR/$u"-*; do [ -d "$d" ] && { echo "$d"; return; }; done
+  die "no such lab: $1 (see ./lab list)"
+}
+current() {
+  [ -f "$STATE_DIR/current" ] || die "no lab running - ./lab start <id>"
+  echo "$LAB_DIR/$(cat "$STATE_DIR/current")"
+}
+rel() { echo "${1#"$LAB_DIR"/}"; }
+
+cmd_list() {
+  local filter=${1:-} dom=${2:-} d name id title mark cur lvl kind last=""
+  cur=$(cat "$STATE_DIR/current" 2>/dev/null || true)
+  while read -r d; do
+    name=$(basename "$d"); id=$(yget id "$d"); kind=$(yget kind "$d"); lvl=$(yget level "$d")
+    case $filter in
+      --learn) [ "$kind" = learn ] || continue ;;
+      --incidents) [ "$kind" = incident ] || continue ;;
+      --domain) [ "${id:0:1}" = "${dom^^}" ] || continue ;;
+    esac
+    if [ "$kind" != "$last" ]; then
+      echo; [ "$kind" = learn ] && echo "${C_BOLD}Learn track${C_0}" || echo "${C_BOLD}Incidents${C_0}"
+      last=$kind
+    fi
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
+    [ "$cur" = "$(rel "$d")" ] && [ ! -f "$STATE_DIR/random" ] && mark="${C_Y}▶${C_0}"
+    printf ' %s %-5s %-4s %s\n' "$mark" "$id" "$(printf '%*s' "${lvl:-1}" '' | sed 's/ /•/g')" "$title"
+  done < <(all_labs)
+  echo
+}
+
+show_ticket() {
+  echo
+  md "$1/ticket.md"
+  cat <<EOF
+
+${C_BOLD}Work${C_0}: ./lab sh  (workspace/ is a git repo)   ${C_BOLD}Check${C_0}: ./lab verify   ${C_BOLD}Stuck?${C_0} ./lab hint
+EOF
+}
+
+# ------------------------------------------------------------ lifecycle -----
+ensure_built() {
+  if ! { [ -x "$CACHE_DIR/bin/terraform" ] && [ -x "$CACHE_DIR/bin/terragrunt" ] &&
+         [ -d "$CACHE_DIR/providers/registry.terraform.io" ] &&
+         docker image inspect "$MOTO_IMAGE" >/dev/null 2>&1; }; then
+    cmd_build
+  fi
+  [ -f "$STATE_DIR/terraformrc" ] || write_configs
+}
+
+cmd_stop() {
+  docker_reset
+  if moto_healthy; then moto_reset || true; fi
+  rm -rf "$WS" "$CI" "$STATE_DIR/git"
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR/random" "$STATE_DIR"/scenario.* \
+        "$SETUP_LOG" "$VERIFY_LOG"
+}
+
+cmd_start() {
+  local d name
+  [ $# -ge 1 ] || die "usage: ./lab start <id|random>"
+  ensure_built
+  if [ "$1" = random ]; then
+    d=$(all_labs | while read -r x; do [ "$(yget kind "$x")" = incident ] && echo "$x"; done | shuf -n1)
+  else
+    d=$(lab_dir "$1")
+  fi
+  name=$(basename "$d")
+  cmd_stop
+  write_configs
+  if [ "$1" = random ]; then info "Starting a random incident..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
+  moto_up
+  ws_reset
+  [ -d "$d/files" ] && cp -a "$d/files/." "$WS/"
+  [ -f "$WS/.gitignore" ] || printf '.terraform/\n.terragrunt-cache/\n.terragrunt-stack/\n*.tfstate\n*.tfstate.*\n*.tfplan\ncrash.log\n' > "$WS/.gitignore"
+  rel "$d" > "$STATE_DIR/current"
+  [ "$1" = random ] && touch "$STATE_DIR/random"
+  : > "$SETUP_LOG"
+  info "Setting the scene (terraform runs as the team did before you)..."
+  if [ -f "$d/.lab/setup.sh" ]; then
+    run_lab_script "$d/.lab/setup.sh" "$WS" || die "setup failed (log: .state/setup.log)"
+  fi
+  # history stays readable: only commit if setup left something uncommitted (or nothing is committed yet)
+  if ! git -C "$WS" rev-parse -q --verify HEAD >/dev/null || [ -n "$(git -C "$WS" status --porcelain)" ]; then
+    ws_commit "as found"
+  fi
+  remember asfound "$(git -C "$WS" rev-parse HEAD)"
+  remember started "$(date +%s)"
+  show_ticket "$d"
+}
+
+cmd_ticket() { show_ticket "$(current)"; }
+
+cmd_hint() {
+  local d n total
+  d=$(current)
+  total=$(grep -c '^## ' "$d/hints.md")
+  if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
+  [ "$n" -gt "$total" ] && n=$total
+  echo "$n" > "$STATE_DIR/hint"
+  echo "${C_BOLD}Hint $n/$total${C_0}"
+  awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
+  [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
+  return 0
+}
+
+cmd_verify() {
+  local d rc=0
+  d=$(current)
+  info "Verifying $(basename "$d") on a fresh CI checkout of workspace/"
+  ci_checkout
+  run_lab_script "$d/.lab/verify.sh" "$CI" "-uo pipefail" || rc=$?
+  if [ $rc -eq 0 ] && [ -z "${LAB_SELFTEST:-}" ]; then
+    grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+  else
+    echo "  (terraform output of the CI run: .state/verify.log)"
+  fi
+  return $rc
+}
+
+cmd_solution() {
+  local d a; d=$(current)
+  if [ -t 0 ] && [ "${1:-}" != -y ]; then
+    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    [[ $a =~ ^[yY] ]] || exit 0
+  fi
+  md "$d/.lab/solution.md"
+}
+
+cmd_solve() {
+  local d; d=$(current)
+  info "Applying reference fix for $(basename "$d")"
+  run_lab_script "$d/.lab/solve.sh" "$WS"
+}
+
+cmd_reset() { local d; d=$(current); cmd_start "$(basename "$d")"; }
+
+cmd_diff() {
+  current >/dev/null
+  git -C "$WS" -c color.ui=always diff "$(recall asfound)" -- . ':!*.terraform.lock.hcl' || true
+  git -C "$WS" status --short --untracked-files=all | grep '^??' || true
+}
+
+cmd_sh() {
+  local d; d=$(current)
+  cat > "$STATE_DIR/bashrc" <<EOF
+[ -f ~/.bashrc ] && source ~/.bashrc
+export PATH="$CACHE_DIR/bin:\$PATH"
+alias tf=terraform tg=terragrunt
+PS1='\[\e[36m\](terralab:$(yget id "$d"))\[\e[0m\] \w \$ '
+cd "$WS"
+echo "terraform $TERRAFORM_VERSION · terragrunt $TERRAGRUNT_VERSION · aws -> moto ($MOTO_URL) · exit to leave"
+EOF
+  exec bash --rcfile "$STATE_DIR/bashrc" -i
+}
+
+cmd_env() {
+  cat <<EOF
+export PATH="$CACHE_DIR/bin:\$PATH"
+export TF_CLI_CONFIG_FILE="$TF_CLI_CONFIG_FILE" CHECKPOINT_DISABLE=1 TG_TF_PATH=terraform
+unset AWS_PROFILE AWS_DEFAULT_PROFILE AWS_SESSION_TOKEN AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE
+export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=eu-central-1 AWS_DEFAULT_REGION=eu-central-1
+export AWS_ENDPOINT_URL="$MOTO_URL" AWS_CONFIG_FILE="$AWS_CONFIG_FILE" AWS_SHARED_CREDENTIALS_FILE="$AWS_SHARED_CREDENTIALS_FILE"
+export AWS_PAGER="" AWS_EC2_METADATA_DISABLED=true
+export GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL" NO_PROXY="$NO_PROXY" no_proxy="$NO_PROXY"
+export TERRALAB_PROVIDER_MIRROR="$TERRALAB_PROVIDER_MIRROR"
+EOF
+  if [ -f "$STATE_DIR/scenario.env" ]; then sed 's/^/export /' "$STATE_DIR/scenario.env"; fi
+  echo "cd \"$WS\""
+}
+
+cmd_status() {
+  docker ps -a --filter label=terralab.infra --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null
+  docker ps -a --filter label=terralab.scenario --format '{{.Names}}\t{{.Status}}' 2>/dev/null
+  if [ -f "$STATE_DIR/current" ]; then
+    if [ -f "$STATE_DIR/random" ]; then echo "lab: (random incident)"; else echo "lab: $(cat "$STATE_DIR/current")"; fi
+  else
+    echo "lab: none"
+  fi
+}
+
+# ------------------------------------------------------------ build ---------
+cmd_build() {
+  local p src ver ns name zip tmp
+  mkdir -p "$CACHE_DIR/bin" "$CACHE_DIR/dl" "$CACHE_DIR/providers" "$CACHE_DIR/plugin-cache"
+  info "Pinned binaries (sha256-verified): terraform $TERRAFORM_VERSION, terragrunt $TERRAGRUNT_VERSION, tflint $TFLINT_VERSION"
+  if ! "$CACHE_DIR/bin/terraform" version 2>/dev/null | grep -q "v$TERRAFORM_VERSION"; then
+    fetch_verified "$TERRAFORM_URL" "$TERRAFORM_SUMS_URL" "$CACHE_DIR/dl/terraform.zip" \
+      "terraform_${TERRAFORM_VERSION}_linux_amd64.zip" || die "terraform download failed"
+    unzip -o -q "$CACHE_DIR/dl/terraform.zip" terraform -d "$CACHE_DIR/bin"
+  fi
+  if ! "$CACHE_DIR/bin/terragrunt" --version 2>/dev/null | grep -q "v$TERRAGRUNT_VERSION"; then
+    fetch_verified "$TERRAGRUNT_URL" "$TERRAGRUNT_SUMS_URL" "$CACHE_DIR/dl/terragrunt" terragrunt_linux_amd64 \
+      || die "terragrunt download failed"
+    install -m 0755 "$CACHE_DIR/dl/terragrunt" "$CACHE_DIR/bin/terragrunt"
+  fi
+  if ! "$CACHE_DIR/bin/tflint" --version 2>/dev/null | grep -q "$TFLINT_VERSION"; then
+    fetch_verified "$TFLINT_URL" "$TFLINT_SUMS_URL" "$CACHE_DIR/dl/tflint.zip" tflint_linux_amd64.zip \
+      || die "tflint download failed"
+    unzip -o -q "$CACHE_DIR/dl/tflint.zip" tflint -d "$CACHE_DIR/bin"
+  fi
+  ok "binaries"
+
+  if ! docker image inspect "$MOTO_IMAGE" >/dev/null 2>&1; then
+    info "Building $MOTO_IMAGE (moto $MOTO_VERSION on $PY_BASE_IMAGE)"
+    docker build -q --build-arg PY_BASE_IMAGE="$PY_BASE_IMAGE" --build-arg MOTO_VERSION="$MOTO_VERSION" \
+      -t "$MOTO_IMAGE" "$LAB_DIR/infra/moto" >/dev/null || die "moto image build failed"
+  fi
+  ok "moto image"
+
+  tmp=$(mktemp -d)
+  { echo 'terraform {'; echo '  required_providers {'
+    for p in $PROVIDERS; do
+      src=${p%%=*}; ver=${p#*=}; name=${src#*/}
+      echo "    $name = { source = \"$src\", version = \"$ver\" }"
+    done
+    echo '  }'; echo '}'; } > "$tmp/main.tf"
+  for p in $PROVIDERS; do
+    src=${p%%=*}; ver=${p#*=}; ns=${src%%/*}; name=${src#*/}
+    zip="$CACHE_DIR/providers/registry.terraform.io/$ns/$name/terraform-provider-${name}_${ver}_linux_amd64.zip"
+    [ -f "$zip" ] && continue
+    info "Mirroring providers (~250 MB)"
+    (cd "$tmp" && TF_CLI_CONFIG_FILE=/dev/null terraform providers mirror -platform=linux_amd64 "$CACHE_DIR/providers" >/dev/null) \
+      || die "provider mirror failed"
+    break
+  done
+  for p in $EXTRA_MIRROR_PROVIDERS; do
+    src=${p%%=*}; ver=${p#*=}; ns=${src%%/*}; name=${src#*/}
+    zip="$CACHE_DIR/providers/registry.terraform.io/$ns/$name/terraform-provider-${name}_${ver}_${EXTRA_MIRROR_PLATFORM}.zip"
+    [ -f "$zip" ] && continue
+    mkdir -p "$tmp/extra"
+    printf 'terraform {\n  required_providers {\n    %s = { source = "%s", version = "%s" }\n  }\n}\n' "$name" "$src" "$ver" > "$tmp/extra/main.tf"
+    (cd "$tmp/extra" && TF_CLI_CONFIG_FILE=/dev/null terraform providers mirror -platform="$EXTRA_MIRROR_PLATFORM" \
+       "$CACHE_DIR/providers" >/dev/null) || die "extra mirror failed for $src"
+    rm -rf "$tmp/extra"
+  done
+  ok "provider mirror (+ $EXTRA_MIRROR_PLATFORM for: $EXTRA_MIRROR_PROVIDERS)"
+
+  write_configs
+  info "Warming the plugin cache (offline install from the mirror)"
+  (cd "$tmp" && terraform init -backend=false -input=false -no-color >/dev/null) || die "offline init failed"
+  rm -rf "$tmp"
+  ok "plugin cache"
+
+  for p in $APP_IMAGES; do
+    docker image inspect "$p" >/dev/null 2>&1 || { info "pulling $p"; docker pull -q "$p" >/dev/null; }
+  done
+  ok "app images: $APP_IMAGES"
+  ok "build complete - try ./lab list"
+}
+
+cmd_doctor() {
+  local bad=0 v
+  yes_no() { if "$@" >/dev/null 2>&1; then return 0; else bad=1; return 1; fi; }
+  v=$("$CACHE_DIR/bin/terraform" version 2>/dev/null | head -1 || true)
+  if [[ $v == *"v$TERRAFORM_VERSION"* ]]; then ok "$v"; else warn "terraform $TERRAFORM_VERSION missing - ./lab build"; bad=1; fi
+  v=$("$CACHE_DIR/bin/terragrunt" --version 2>/dev/null || true)
+  if [[ $v == *"v$TERRAGRUNT_VERSION"* ]]; then ok "$v"; else warn "terragrunt $TERRAGRUNT_VERSION missing - ./lab build"; bad=1; fi
+  if yes_no docker info; then ok "docker reachable"; else warn "docker not reachable"; fi
+  if yes_no docker image inspect "$MOTO_IMAGE"; then ok "$MOTO_IMAGE present"; else warn "$MOTO_IMAGE missing - ./lab build"; fi
+  if moto_healthy; then ok "moto healthy at $MOTO_URL"; else warn "moto not running (./lab up, or any ./lab start)"; fi
+  if yes_no test -d "$CACHE_DIR/providers/registry.terraform.io"; then
+    ok "provider mirror: $(du -sh "$CACHE_DIR/providers" | cut -f1)"
+  else
+    warn "provider mirror missing - ./lab build"
+  fi
+  ok "cache total: $(du -sh "$CACHE_DIR" | cut -f1) · free disk: $(df -h "$LAB_DIR" | awk 'NR==2{print $4}')"
+  if command -v terraform >/dev/null 2>&1 && [ "$(command -v terraform)" != "$CACHE_DIR/bin/terraform" ]; then
+    echo "  note: host terraform ($(command -v terraform)) is ignored; the lab uses cache/bin"
+  fi
+  return $bad
+}
+
+cmd_up()   { ensure_built; moto_up; ok "moto up at $MOTO_URL"; }
+cmd_down() { cmd_stop; docker rm -f "$MOTO_CTR" tfl-pg >/dev/null 2>&1 || true; ok "lab containers removed"; }
+
+# ------------------------------------------------------------ selftest ------
+cmd_selftest() {
+  local targets=() d name t0 broken fixed results=() sel=${1:-all}
+  case $sel in
+    all) mapfile -t targets < <(all_labs) ;;
+    learn|incidents)
+      while read -r d; do [ "$(yget kind "$d")" = "${sel%s}" ] && targets+=("$d"); done < <(all_labs) ;;
+    wave1|wave2)
+      while read -r d; do [ "$(yget kind "$d")" = incident ] && [ "$(yget wave "$d")" = "${sel#wave}" ] && targets+=("$d"); done < <(all_labs) ;;
+    *) for d in "$@"; do targets+=("$(lab_dir "$d")"); done ;;
+  esac
+  [ ${#targets[@]} -gt 0 ] || die "nothing to test for '$sel'"
+  export LAB_SELFTEST=1     # don't mark labs as solved
+  for d in "${targets[@]}"; do
+    name=$(basename "$d"); t0=$SECONDS
+    echo; info "${C_BOLD}selftest $name${C_0}"
+    if ! ( cmd_start "$name" ) >/dev/null; then
+      results+=("$(printf '%-38s SETUP FAILED %4ss' "$name" $((SECONDS - t0)))")
+      continue
+    fi
+    broken=ok; ( LAB_EXPECT_FAIL=1 LAB_LOCK_TIMEOUT=1s cmd_verify ) >/dev/null 2>&1 && broken="NOT BROKEN"
+    ( cmd_solve ) >/dev/null 2>&1 || true
+    fixed=ok; ( cmd_verify ) || fixed="NOT FIXED"
+    results+=("$(printf '%-38s broken:%-10s fixed:%-10s %4ss' "$name" "$broken" "$fixed" $((SECONDS - t0)))")
+  done
+  cmd_stop
+  echo; echo "${C_BOLD}Selftest results${C_0}"; printf '  %s\n' "${results[@]}"
+  printf '%s\n' "${results[@]}" | grep -qE 'NOT |FAILED' && return 1 || return 0
+}
+
+# ----------------------------------------------------------------- main -----
+cmd=${1:-help}; shift || true
+case $cmd in
+  build) cmd_build ;;
+  doctor) cmd_doctor ;;
+  list|ls) cmd_list "$@" ;;
+  start) cmd_start "$@" ;;
+  ticket) cmd_ticket ;;
+  sh) cmd_sh ;;
+  env) cmd_env ;;
+  aws) aws "$@" ;;
+  verify) cmd_verify ;;
+  hint) cmd_hint "$@" ;;
+  diff) cmd_diff ;;
+  solution) cmd_solution "$@" ;;
+  solve) cmd_solve ;;
+  reset) cmd_reset ;;
+  stop) cmd_stop; ok "stopped" ;;
+  status|st) cmd_status ;;
+  up) cmd_up ;;
+  down) cmd_down ;;
+  selftest) cmd_selftest "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

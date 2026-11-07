@@ -1,0 +1,8 @@
+id: S04
+title: Two pipelines keep deleting each other's resources
+kind: incident
+level: 3
+domain: state
+needs: [moto]
+wave: 1
+est: 20m

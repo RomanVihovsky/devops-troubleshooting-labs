@@ -1,0 +1,8 @@
+id: G01
+title: CI broke after upgrading Terragrunt to 1.x
+kind: incident
+level: 1
+domain: terragrunt
+needs: [moto]
+wave: 1
+est: 10m

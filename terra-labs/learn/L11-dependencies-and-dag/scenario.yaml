@@ -1,0 +1,7 @@
+id: L11
+title: Dependencies, mocks and the DAG
+kind: learn
+level: 2
+domain: terragrunt
+needs: [moto]
+est: 25m

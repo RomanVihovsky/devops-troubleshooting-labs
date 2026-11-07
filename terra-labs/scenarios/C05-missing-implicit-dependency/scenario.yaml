@@ -1,0 +1,8 @@
+id: C05
+title: A fresh environment sometimes fails with network not found
+kind: incident
+level: 1
+domain: language
+needs: [docker]
+wave: 1
+est: 10m

@@ -1,0 +1,8 @@
+id: D01
+title: count -> for_each refactor wants to recreate every container
+kind: incident
+level: 2
+domain: refactoring
+needs: [docker]
+wave: 1
+est: 15m

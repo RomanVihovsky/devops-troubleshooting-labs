@@ -1,0 +1,7 @@
+id: L10
+title: Your first Terragrunt unit
+kind: learn
+level: 1
+domain: terragrunt
+needs: [moto]
+est: 25m

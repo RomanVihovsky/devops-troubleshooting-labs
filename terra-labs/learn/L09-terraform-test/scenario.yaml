@@ -1,0 +1,7 @@
+id: L09
+title: terraform test - unit, mocks and integration
+kind: learn
+level: 2
+domain: testing
+needs: [moto]
+est: 30m

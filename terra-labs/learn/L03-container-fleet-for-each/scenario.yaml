@@ -1,0 +1,7 @@
+id: L03
+title: A container fleet with for_each
+kind: learn
+level: 1
+domain: language
+needs: [docker]
+est: 20m

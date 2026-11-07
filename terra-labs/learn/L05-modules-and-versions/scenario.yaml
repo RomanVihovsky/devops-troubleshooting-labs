@@ -1,0 +1,7 @@
+id: L05
+title: Modules and versions
+kind: learn
+level: 2
+domain: modules
+needs: [moto, git]
+est: 25m

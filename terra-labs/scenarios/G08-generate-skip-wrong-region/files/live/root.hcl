@@ -1,0 +1,36 @@
+locals {
+  env    = read_terragrunt_config(find_in_parent_folders("env.hcl")).locals.env
+  region = read_terragrunt_config(find_in_parent_folders("env.hcl")).locals.region
+}
+
+remote_state {
+  backend = "s3"
+  generate = {
+    path      = "backend.tf"
+    if_exists = "overwrite_terragrunt"
+  }
+  config = {
+    bucket       = "acme-tg-state"
+    key          = "${path_relative_to_include()}/terraform.tfstate"
+    region       = "eu-central-1"
+    use_lockfile = true
+
+    # lab only: the fake AWS cannot evaluate aws:SecureTransport
+    skip_bucket_enforced_tls = true
+  }
+}
+
+# Don't clobber hand-written provider files (some old modules have one).
+generate "provider" {
+  path      = "provider.tf"
+  if_exists = "skip"
+  contents  = <<-EOT
+    provider "aws" {
+      region = "${local.region}"
+    }
+  EOT
+}
+
+inputs = {
+  env = local.env
+}

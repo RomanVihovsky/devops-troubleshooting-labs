@@ -1,0 +1,8 @@
+id: D04
+title: Apply fails with BucketAlreadyOwnedByYou
+kind: incident
+level: 1
+domain: drift
+needs: [moto]
+wave: 1
+est: 10m
