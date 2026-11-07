@@ -1,0 +1,34 @@
+# Per-lab generated state: SSH keys, tfstate, progress markers. NEVER publish.
+.state/
+# Downloaded binaries, VM images, provider mirrors (rebuilt by ./lab build / up)
+/*/cache/
+# terra-labs: the student's working copy, created by ./lab start (contains its own .git)
+/terra-labs/workspace/
+
+# Terraform / Terragrunt runtime artefacts (if a lab is run in place)
+# Do NOT ignore *.tfvars or override.tf: the scenarios ship them as fixtures.
+.terraform/
+.terragrunt-cache/
+.terragrunt-stack/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Safety net for secrets
+*.pem
+*.key
+id_rsa
+id_ed25519
+id_ecdsa
+.env
+
+# Python / editors / OS
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
