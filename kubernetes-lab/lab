@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# kubernetes-lab CLI. The cluster lives in a sibling VirtualBox VM ("lab VM", docs/LAB-VM-SETUP.md).
+set -euo pipefail
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$LAB_DIR/lib/common.sh"; source "$LAB_DIR/versions.env"; source "$LAB_DIR/lib/remote.sh"
+
+usage() {
+  cat <<U
+./lab vm check            is the lab VM reachable / configured as documented?
+./lab vm provision        install Docker, kind, kubectl on the lab VM (idempotent)
+./lab spike up|soak|down  Phase 0: 1-node test cluster, then the 4-node cluster + soak
+./lab sh                  shell on the lab VM (kubectl, kind, docker)
+./lab health [n]          desktop VM health log
+U
+}
+
+spike() {
+  case "${1:-}" in
+    up)
+      health_start
+      info "1-node spike cluster"
+      vx "kind get clusters | grep -qx spike || kind create cluster --config - --image '$KIND_NODE_IMAGE' --wait 180s" \
+        < "$LAB_DIR/infra/kind/spike-1node.yaml"
+      vx 'kubectl --context kind-spike get nodes -o wide && kubectl --context kind-spike -n kube-system get pods'
+      ;;
+    soak)
+      health_start
+      vx 'kind delete cluster --name spike >/dev/null 2>&1 || true'
+      info "4-node lab cluster"
+      vx "kind get clusters | grep -qx lab || kind create cluster --config - --image '$KIND_NODE_IMAGE' --wait 300s" \
+        < "$LAB_DIR/infra/kind/lab-4node.yaml"
+      vx 'kubectl get nodes -o wide'
+      ;;
+    down) vx 'for c in $(kind get clusters); do kind delete cluster --name "$c"; done'; health_stop ;;
+    *) die "usage: ./lab spike up|soak|down" ;;
+  esac
+}
+
+case "${1:-help}" in
+  vm)
+    case "${2:-check}" in
+      check) vm_check ;;
+      provision) vm_check || die "fix the items above first (docs/LAB-VM-SETUP.md)"; vm_provision ;;
+      *) die "usage: ./lab vm check|provision" ;;
+    esac ;;
+  spike) shift; spike "$@" ;;
+  sh) shift; exec ssh -t $(ssh_opts) "$LAB_VM_USER@$LAB_VM_HOST" "$@" ;;
+  health) tail -n "${2:-20}" "$STATE_DIR/health.log" ;;
+  *) usage ;;
+esac
