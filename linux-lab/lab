@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# linux-lab - classic Linux troubleshooting interview tasks on throwaway servers.
+# Run `./lab help` for usage.
+set -euo pipefail
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$LAB_DIR/lib/common.sh"
+
+usage() {
+  cat <<EOF
+${C_BOLD}linux-lab${C_0} - Linux troubleshooting interview playground
+
+  ./lab build               build the server image (once, needs internet)
+  ./lab list                list scenarios (✔ = solved before)
+  ./lab start <id|random>   fresh server(s), break them, show the ticket
+  ./lab ticket              show the current ticket again
+  ./lab sh [srv|client] [user]   shell on a machine (default: srv as admin; user root works too)
+  ./lab ssh                 real SSH login: admin@$SRV_IP with a lab-generated key
+  ./lab verify              PASS / FAIL against the ticket's test
+  ./lab hint [n]            next progressive hint (or hint n)
+  ./lab solution            root cause + fix (spoiler)
+  ./lab solve               apply the reference fix (spoiler)
+  ./lab stop                delete the scenario's machines
+  ./lab status              what's running
+  ./lab selftest <id|all>   start -> verify(expect FAIL) -> solve -> verify(expect PASS)
+EOF
+}
+
+# ------------------------------------------------------------- scenarios ----
+scenario_dir() {
+  local id=$1 d
+  [ -d "$SCEN_DIR/$id" ] && { echo "$SCEN_DIR/$id"; return; }
+  [[ $id =~ ^[0-9]+$ ]] && id=$(printf '%02d' "$((10#$id))")
+  for d in "$SCEN_DIR/$id"-*; do [ -d "$d" ] && { echo "$d"; return; }; done
+  die "no such scenario: $1 (see ./lab list)"
+}
+current() {
+  [ -f "$STATE_DIR/current" ] || die "no scenario running - ./lab start <id>"
+  echo "$SCEN_DIR/$(cat "$STATE_DIR/current")"
+}
+
+# md <file>: render the bit of markdown we use (headings, **bold**, `code`)
+md() {
+  sed -e "s/^#\{1,2\} \(.*\)/${C_BOLD}${C_C}\1${C_0}/" \
+      -e "s/\*\*\([^*]*\)\*\*/${C_BOLD}\1${C_0}/g" \
+      -e "s/\`\([^\`]*\)\`/${C_C}\1${C_0}/g" \
+      -e '/^```/d' "$@"
+}
+
+cmd_list() {
+  local d name title mark cur
+  cur=$(cat "$STATE_DIR/current" 2>/dev/null || true)
+  for d in "$SCEN_DIR"/*/; do
+    name=$(basename "$d")
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
+    [ "$cur" = "$name" ] && [ ! -f "$STATE_DIR/random" ] && mark="${C_Y}▶${C_0}"
+    printf ' %s %-30s %s\n' "$mark" "$name" "$title"
+  done
+}
+
+show_ticket() {
+  echo
+  md "$1/ticket.md"
+  cat <<EOF
+
+${C_BOLD}Get in${C_0}: ./lab sh   (admin, passwordless sudo)    ${C_BOLD}Check${C_0}: ./lab verify    ${C_BOLD}Stuck?${C_0} ./lab hint
+EOF
+}
+
+cmd_stop() {
+  if docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" | grep -q .; then
+    compose "$LAB_DIR" down -v -t 3 --remove-orphans >/dev/null 2>&1 || true
+    # belt and braces (e.g. compose file of the old scenario changed)
+    docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" | xargs -r docker rm -f >/dev/null
+    docker network rm "$PROJECT" >/dev/null 2>&1 || true
+  fi
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR/random" "$STATE_DIR"/scenario.*
+}
+
+cmd_start() {
+  local d name h
+  [ $# -ge 1 ] || die "usage: ./lab start <id|random>"
+  docker image inspect "$IMAGE" >/dev/null 2>&1 || cmd_build
+  if [ "$1" = random ]; then
+    d=$(find "$SCEN_DIR" -mindepth 1 -maxdepth 1 -type d | shuf -n1)
+  else
+    d=$(scenario_dir "$1")
+  fi
+  name=$(basename "$d")
+  cmd_stop
+  if [ "$1" = random ]; then info "Starting a random scenario..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
+  compose "$d" up -d --quiet-pull >/dev/null 2>&1 || compose "$d" up -d
+  for h in srv client; do
+    running "$h" || continue
+    wait_boot "$h" 90 || die "lnx-$h did not boot (docker logs lnx-$h)"
+  done
+  echo "$name" > "$STATE_DIR/current"
+  [ "$1" = random ] && touch "$STATE_DIR/random"
+  install_ssh_key
+  info "Breaking things..."
+  # shellcheck disable=SC1091
+  ( source "$d/.lab/setup.sh" )
+  remember started "$(date +%s)"
+  show_ticket "$d"
+}
+
+cmd_ticket() { show_ticket "$(current)"; }
+
+cmd_hint() {
+  local d n total
+  d=$(current)
+  total=$(grep -c '^## ' "$d/hints.md")
+  if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
+  [ "$n" -gt "$total" ] && n=$total
+  echo "$n" > "$STATE_DIR/hint"
+  echo "${C_BOLD}Hint $n/$total${C_0}"
+  awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
+  [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
+  return 0
+}
+
+cmd_verify() {
+  local d rc=0
+  d=$(current)
+  info "Verifying $(basename "$d")"
+  # shellcheck disable=SC1091
+  ( source "$d/.lab/verify.sh" ) || rc=$?
+  if [ $rc -eq 0 ]; then
+    grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+  fi
+  return $rc
+}
+
+cmd_solution() {
+  local d a; d=$(current)
+  if [ -t 0 ] && [ "${1:-}" != -y ]; then
+    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    [[ $a =~ ^[yY] ]] || exit 0
+  fi
+  md "$d/.lab/solution.md"
+}
+
+cmd_solve() {
+  local d; d=$(current)
+  info "Applying reference fix for $(basename "$d")"
+  # shellcheck disable=SC1091
+  ( source "$d/.lab/solve.sh" )
+}
+
+cmd_sh() {
+  local h=${1:-srv} u=${2:-admin}
+  running "$h" || die "lnx-$h is not running in this scenario"
+  if [ "$u" = root ]; then
+    docker exec -it "lnx-$h" bash -l
+  else
+    docker exec -it "lnx-$h" su - "$u"
+  fi
+}
+
+# ------------------------------------------------------------------ ssh -----
+install_ssh_key() {
+  [ -f "$STATE_DIR/id_ed25519" ] || ssh-keygen -q -t ed25519 -N '' -C linux-lab -f "$STATE_DIR/id_ed25519"
+  docker exec -i lnx-srv sh -c 'install -d -m 700 -o admin -g admin /home/admin/.ssh &&
+    cat > /home/admin/.ssh/authorized_keys && chown admin:admin /home/admin/.ssh/authorized_keys &&
+    chmod 600 /home/admin/.ssh/authorized_keys' < "$STATE_DIR/id_ed25519.pub"
+}
+
+cmd_ssh() {
+  running srv || die "no scenario running"
+  exec ssh -i "$STATE_DIR/id_ed25519" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR "admin@$SRV_IP"
+}
+
+# ---------------------------------------------------------------- misc ------
+cmd_build() {
+  info "Building $IMAGE (Debian 12 + systemd + tools, ~1-2 min)"
+  docker build -q -t "$IMAGE" "$LAB_DIR/infra/server" >/dev/null 2>&1 \
+    || docker build -t "$IMAGE" "$LAB_DIR/infra/server"
+  ok "image ready"
+}
+
+cmd_status() {
+  docker ps --filter "label=com.docker.compose.project=$PROJECT" --format 'table {{.Names}}\t{{.Status}}'
+  [ -f "$STATE_DIR/current" ] && [ ! -f "$STATE_DIR/random" ] && echo "scenario: $(cat "$STATE_DIR/current")"
+  return 0
+}
+
+cmd_selftest() {
+  local targets=() d name t0 broken fixed results=()
+  if [ "${1:-all}" = all ]; then
+    for d in "$SCEN_DIR"/*/; do targets+=("$(basename "$d")"); done
+  else
+    for d in "$@"; do targets+=("$(basename "$(scenario_dir "$d")")"); done
+  fi
+  for name in "${targets[@]}"; do
+    t0=$SECONDS
+    echo; info "${C_BOLD}selftest $name${C_0}"
+    if ! ( cmd_start "$name" ) >/dev/null; then
+      results+=("$(printf '%-30s SETUP FAILED %4ss' "$name" $((SECONDS - t0)))")
+      continue
+    fi
+    broken=ok; LAB_EXPECT_FAIL=1 cmd_verify >/dev/null 2>&1 && broken="NOT BROKEN"
+    cmd_solve >/dev/null 2>&1 || true
+    fixed=ok; cmd_verify || fixed="NOT FIXED"
+    results+=("$(printf '%-30s broken:%-10s fixed:%-10s %4ss' "$name" "$broken" "$fixed" $((SECONDS - t0)))")
+  done
+  cmd_stop
+  echo; echo "${C_BOLD}Selftest results${C_0}"; printf '  %s\n' "${results[@]}"
+  printf '%s\n' "${results[@]}" | grep -qE 'NOT |FAILED' && return 1 || return 0
+}
+
+# ----------------------------------------------------------------- main -----
+cmd=${1:-help}; shift || true
+case $cmd in
+  build) cmd_build ;;
+  list|ls) cmd_list ;;
+  start) cmd_start "$@" ;;
+  ticket) cmd_ticket ;;
+  sh) cmd_sh "$@" ;;
+  ssh) cmd_ssh ;;
+  verify) cmd_verify ;;
+  hint) cmd_hint "$@" ;;
+  solution) cmd_solution "$@" ;;
+  solve) cmd_solve ;;
+  stop|down) cmd_stop; ok "stopped" ;;
+  status|st) cmd_status ;;
+  selftest) cmd_selftest "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

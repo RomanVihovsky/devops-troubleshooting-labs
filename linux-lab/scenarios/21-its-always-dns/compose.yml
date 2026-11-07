@@ -1,0 +1,12 @@
+# Machines for this scenario (definitions: ../../infra/hosts.yml)
+services:
+  srv:
+    extends: { file: ../../infra/hosts.yml, service: srv }
+  client:
+    extends: { file: ../../infra/hosts.yml, service: client }
+  dns:
+    extends: { file: ../../infra/hosts.yml, service: dns }
+networks:
+  lab:
+    name: linuxlab
+    ipam: { config: [ { subnet: 10.77.0.0/24 } ] }

@@ -1,0 +1,6 @@
+
+ linux-lab server  -  something on this box is broken. Ticket: ./lab ticket (on the host)
+ You are "admin" with passwordless sudo.
+
+ look around:  systemctl --failed | journalctl -xe | top | ps auxf | ss -tulpn | df -h | df -i
+               lsof | strace -p | dmesg -T | findmnt | lsattr | namei -l | getent | dig

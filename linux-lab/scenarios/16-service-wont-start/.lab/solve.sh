@@ -1,0 +1,1 @@
+sx "sed -i 's/^User=inventry/User=inventory/; s#/opt/inventory/bin/api.py#/opt/inventory/api.py#' /etc/systemd/system/inventory-api.service && systemctl daemon-reload && systemctl reset-failed inventory-api && systemctl restart inventory-api"

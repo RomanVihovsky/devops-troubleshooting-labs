@@ -1,0 +1,12 @@
+# Machines for this scenario (definitions: ../../infra/hosts.yml)
+services:
+  srv:
+    extends: { file: ../../infra/hosts.yml, service: srv }
+    tmpfs:
+      - /run
+      - /run/lock
+      - /var/lib/app/sessions:size=256m,nr_inodes=20000
+networks:
+  lab:
+    name: linuxlab
+    ipam: { config: [ { subnet: 10.77.0.0/24 } ] }
