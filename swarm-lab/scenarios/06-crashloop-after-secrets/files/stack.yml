@@ -1,0 +1,24 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+      REDIS_HOST: redis
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+      - redis_pw
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 2
+
+  redis:
+    image: registry:5000/redis:7-alpine
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    secrets:
+      - source: redis_pw
+        target: redis_password
+
+secrets:
+  redis_pw:
+    file: ./redis_password.txt

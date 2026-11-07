@@ -1,0 +1,22 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+      DATA_DIR: /data
+      LOG_FILE: /data/app.log
+      LOG_LEVEL: debug        # TODO turn off after the incident on Monday
+      LOG_MAX_MB: "16"
+    volumes:
+      - appdata:/data
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 1
+
+volumes:
+  appdata:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=48m"

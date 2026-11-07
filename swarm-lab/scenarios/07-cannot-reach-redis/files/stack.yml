@@ -1,0 +1,21 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+      REDIS_HOST: redis
+    ports:
+      - "8080:8000"
+    networks: [frontend]
+    deploy:
+      replicas: 2
+
+  redis:
+    image: registry:5000/redis:7-alpine
+    networks: [backend]
+
+networks:
+  frontend:
+    driver: overlay
+  backend:
+    driver: overlay

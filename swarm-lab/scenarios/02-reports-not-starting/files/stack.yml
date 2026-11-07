@@ -1,0 +1,14 @@
+# Reporting API (resources block copied from the data-warehouse stack)
+services:
+  reports:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: reports
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 2
+      resources:
+        reservations:
+          cpus: "0.25"
+          memory: 48G

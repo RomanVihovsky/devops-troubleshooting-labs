@@ -1,0 +1,14 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    entrypoint: ["/app/start.sh"]
+    environment:
+      APP_NAME: web
+    ports:
+      - "8080:8000"
+    stop_grace_period: 30s
+    deploy:
+      replicas: 3
+      update_config:
+        parallelism: 1
+        order: stop-first

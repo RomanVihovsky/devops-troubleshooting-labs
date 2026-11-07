@@ -1,0 +1,12 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == worker

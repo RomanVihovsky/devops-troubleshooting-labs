@@ -1,0 +1,12 @@
+services:
+  api:
+    image: lab/report-api:1.4
+    environment:
+      APP_NAME: report-api
+      APP_VERSION: "1.4"
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 3
+      placement:
+        max_replicas_per_node: 1

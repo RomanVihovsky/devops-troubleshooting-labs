@@ -1,0 +1,85 @@
+# swarm-lab infrastructure: the "datacenter".
+#
+#   datacenter network 172.30.0.0/24  (docker bridge "swarmlab")
+#   ├── manager1  172.30.0.11   swarm manager (leader)
+#   ├── manager2  172.30.0.12   extra manager  (profile: ha)
+#   ├── manager3  172.30.0.13   extra manager  (profile: ha)
+#   ├── worker1   172.30.0.21   swarm worker
+#   ├── worker2   172.30.0.22   swarm worker
+#   ├── registry  172.30.0.5    private registry  (registry:5000, plain HTTP)
+#   └── legacy-api 172.30.0.50  non-swarm service the apps depend on (:8080)
+#
+# All images come from the private registry (seeded from the host by
+# `./lab up`), so the lab never needs Docker Hub at runtime.
+#
+# Each node is a privileged Docker-in-Docker container = a "VM" with its own
+# kernel network namespace, iptables, tc, routes and dockerd.
+name: swarmlab
+
+x-node: &node
+  image: swarmlab/node:1
+  pull_policy: never
+  privileged: true
+  restart: unless-stopped
+  volumes:
+    - ../workspace:/lab/workspace
+    - ../images:/lab/images:ro
+
+services:
+  manager1:
+    <<: *node
+    container_name: lab-manager1
+    hostname: manager1
+    networks: { dc: { ipv4_address: 172.30.0.11 } }
+
+  manager2:
+    <<: *node
+    profiles: [ha]
+    container_name: lab-manager2
+    hostname: manager2
+    networks: { dc: { ipv4_address: 172.30.0.12 } }
+
+  manager3:
+    <<: *node
+    profiles: [ha]
+    container_name: lab-manager3
+    hostname: manager3
+    networks: { dc: { ipv4_address: 172.30.0.13 } }
+
+  worker1:
+    <<: *node
+    container_name: lab-worker1
+    hostname: worker1
+    networks: { dc: { ipv4_address: 172.30.0.21 } }
+
+  worker2:
+    <<: *node
+    container_name: lab-worker2
+    hostname: worker2
+    networks: { dc: { ipv4_address: 172.30.0.22 } }
+
+  registry:
+    image: registry:2
+    container_name: lab-registry
+    hostname: registry
+    restart: unless-stopped
+    networks: { dc: { ipv4_address: 172.30.0.5 } }
+
+
+  legacy-api:
+    image: nginx:1.27-alpine
+    container_name: lab-legacy-api
+    hostname: legacy-api
+    restart: unless-stopped
+    volumes:
+      - ./legacy/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: { dc: { ipv4_address: 172.30.0.50 } }
+
+networks:
+  dc:
+    name: swarmlab
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+

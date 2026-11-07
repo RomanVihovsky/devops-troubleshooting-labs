@@ -1,0 +1,15 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: shop
+      REDIS_HOST: redis
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 3
+      placement:
+        max_replicas_per_node: 1
+
+  redis:
+    image: registry:5000/redis:7-alpine

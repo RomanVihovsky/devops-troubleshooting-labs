@@ -1,0 +1,9 @@
+services:
+  agent:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: node-agent
+    ports:
+      - "8080:8000"
+    deploy:
+      mode: global

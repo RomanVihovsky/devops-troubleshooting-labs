@@ -1,0 +1,12 @@
+services:
+  files:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: files
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.labels.zone == b      # storage nodes

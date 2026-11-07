@@ -1,0 +1,9 @@
+# swarm-lab node shell
+[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion
+if [ "$(docker info -f '{{.Swarm.ControlAvailable}}' 2>/dev/null)" = "true" ]; then role=mgr; else role=wrk; fi
+PS1='\[\e[1;33m\][\h:'"$role"']\[\e[0m\] \w \$ '
+export PAGER=less
+alias ll='ls -lah'
+alias dps='docker ps --format "table {{.ID}}\t{{.Names}}\t{{.Status}}"'
+alias sps='docker service ps --no-trunc'
+cat /etc/motd

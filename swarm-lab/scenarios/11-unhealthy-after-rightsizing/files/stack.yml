@@ -1,0 +1,20 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+      SELFTEST_ROUNDS: "30000"
+    ports:
+      - "8080:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.02"      # PR #482: "it idles at 1%"
+          memory: 128M

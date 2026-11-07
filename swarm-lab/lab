@@ -1,0 +1,429 @@
+#!/usr/bin/env bash
+# swarm-lab - break a Docker Swarm on purpose, then fix it with Linux skills.
+# Run `./lab help` for usage.
+set -euo pipefail
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$LAB_DIR/lib/common.sh"
+
+usage() {
+  cat <<EOF
+${C_BOLD}swarm-lab${C_0} - Docker Swarm troubleshooting playground
+
+${C_BOLD}Lab lifecycle${C_0}
+  ./lab up                  build & start the "datacenter" (1 manager + 2 workers + registry)
+  ./lab status              nodes, services, tasks at a glance
+  ./lab reset [--hard]      remove the current scenario & undo injected faults (--hard: reboot nodes)
+  ./lab destroy             delete everything the lab created
+
+${C_BOLD}Scenarios${C_0}
+  ./lab list                list scenarios (✔ = solved before)
+  ./lab start <id|random>   reset, then break things for scenario <id> and show the ticket
+  ./lab ticket              show the current ticket again
+  ./lab hint [n]            next progressive hint (or hint n)
+  ./lab verify              check whether the current scenario is fixed
+  ./lab deploy              re-deploy workspace/stack.yml as stack "$STACK" (after you edit it)
+  ./lab solution            show root cause + reference fix (spoiler!)
+  ./lab solve               apply the reference fix automatically (spoiler!)
+
+${C_BOLD}Access${C_0}
+  ./lab sh <node>           shell on a node, e.g. ./lab sh manager1   (nodes: $(lab_nodes | tr '\n' ' '))
+  http://172.30.0.11:$APP_PORT   app via manager1  (.21 worker1, .22 worker2) - routing mesh
+
+${C_BOLD}Chaos (build your own scenario)${C_0}
+  ./lab inject <node> latency <ms> [jitter_ms]   tc netem delay on eth0
+  ./lab inject <node> loss <percent>             tc netem packet loss on eth0
+  ./lab inject <node> mtu <bytes>                shrink the underlay MTU
+  ./lab inject <node> block <tcp|udp> <port>     iptables DROP inbound port (e.g. udp 4789, tcp 2377)
+  ./lab inject <node> partition                  drop all traffic to/from the other nodes
+  ./lab inject <node> dns                        point /etc/resolv.conf at a dead resolver
+  ./lab inject <node> freeze                     docker pause the whole node (hung VM)
+  ./lab clear                                    undo all injected faults
+
+${C_BOLD}Testing the lab itself${C_0}
+  ./lab selftest <id|all>   start -> verify(expect FAIL) -> solve -> verify(expect PASS)
+EOF
+}
+
+# ------------------------------------------------------------- scenarios ----
+scenario_dir() {
+  local id=$1 d
+  [ -d "$SCEN_DIR/$id" ] && { echo "$SCEN_DIR/$id"; return; }
+  [[ $id =~ ^[0-9]+$ ]] && id=$(printf '%02d' "$((10#$id))")
+  for d in "$SCEN_DIR/$id"-*; do [ -d "$d" ] && { echo "$d"; return; }; done
+  die "no such scenario: $1 (see ./lab list)"
+}
+current() {
+  [ -f "$STATE_DIR/current" ] || die "no scenario running - ./lab start <id>"
+  echo "$SCEN_DIR/$(cat "$STATE_DIR/current")"
+}
+
+cmd_list() {
+  local d name title mark
+  for d in "$SCEN_DIR"/*/; do
+    name=$(basename "$d")
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
+    [ "$(cat "$STATE_DIR/current" 2>/dev/null)" = "$name" ] && [ ! -f "$STATE_DIR/random" ] && mark="${C_Y}▶${C_0}"
+    printf ' %s %-32s %s\n' "$mark" "$name" "$title"
+  done
+}
+
+# md <file>: render the tiny bit of markdown we use (headings, **bold**, `code`)
+md() {
+  sed -e "s/^#\{1,2\} \(.*\)/${C_BOLD}${C_C}\1${C_0}/" \
+      -e "s/\*\*\([^*]*\)\*\*/${C_BOLD}\1${C_0}/g" \
+      -e "s/\`\([^\`]*\)\`/${C_C}\1${C_0}/g" \
+      -e '/^```/d' "$@"
+}
+
+show_ticket() {
+  local d=$1
+  echo
+  md "$d/ticket.md"
+  cat <<EOF
+
+${C_BOLD}Your workspace${C_0}: $LAB_DIR/workspace/  (mounted as /lab/workspace on every node)
+  edit stack.yml there, then: ./lab deploy   or on manager1: docker stack deploy -c /lab/workspace/stack.yml $STACK
+${C_BOLD}When you think it's fixed${C_0}: ./lab verify      ${C_BOLD}Stuck?${C_0} ./lab hint
+EOF
+}
+
+cmd_start() {
+  local d name
+  [ $# -ge 1 ] || die "usage: ./lab start <id|random>"
+  if [ "$1" = random ]; then
+    d=$(find "$SCEN_DIR" -mindepth 1 -maxdepth 1 -type d | shuf -n1)
+  else
+    d=$(scenario_dir "$1")
+  fi
+  name=$(basename "$d")
+  cmd_reset
+  if [ "$1" = random ]; then
+    info "Starting a random scenario (breaking things...)"
+  else
+    info "Starting scenario ${C_BOLD}$name${C_0} (breaking things...)"
+  fi
+  cp -r "$d/files/." "$WORK_DIR/"
+  echo "$name" > "$STATE_DIR/current"
+  rm -f "$STATE_DIR/hint" "$STATE_DIR/random"
+  [ "$1" = random ] && touch "$STATE_DIR/random"
+  if [ -f "$d/.lab/setup.sh" ]; then
+    # shellcheck disable=SC1091
+    ( source "$d/.lab/setup.sh" )
+  else
+    deploy_stack
+  fi
+  show_ticket "$d"
+}
+
+cmd_ticket() { show_ticket "$(current)"; }
+
+cmd_hint() {
+  local d n total
+  d=$(current)
+  total=$(grep -c '^## ' "$d/hints.md")
+  if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
+  [ "$n" -gt "$total" ] && n=$total
+  echo "$n" > "$STATE_DIR/hint"
+  echo "${C_BOLD}Hint $n/$total${C_0}"
+  awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
+  [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
+  return 0
+}
+
+cmd_verify() {
+  local d rc=0
+  d=$(current)
+  info "Verifying $(basename "$d")"
+  # shellcheck disable=SC1091
+  ( source "$d/.lab/verify.sh" ) || rc=$?
+  if [ $rc -eq 0 ]; then
+    grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+  fi
+  return $rc
+}
+
+cmd_solution() {
+  local d; d=$(current)
+  if [ -t 0 ] && [ "${1:-}" != -y ]; then
+    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    [[ $a =~ ^[yY] ]] || exit 0
+  fi
+  cat "$d/.lab/solution.md"
+}
+
+cmd_solve() {
+  local d; d=$(current)
+  info "Applying reference fix for $(basename "$d")"
+  # shellcheck disable=SC1091
+  ( source "$d/.lab/solve.sh" )
+}
+
+cmd_deploy() {
+  [ -f "$WORK_DIR/stack.yml" ] || die "workspace/stack.yml not found - start a scenario first"
+  dk stack deploy --detach=true -c /lab/workspace/stack.yml "$STACK"
+}
+
+# ---------------------------------------------------------------- lab up ----
+swarm_init() {
+  if [ "$(dk info -f '{{.Swarm.LocalNodeState}}')" != active ]; then
+    info "Initialising swarm on manager1"
+    dk swarm init --advertise-addr 172.30.0.11 \
+      --default-addr-pool 10.10.0.0/16 --default-addr-pool-mask-length 24 >/dev/null
+  fi
+}
+
+baseline_labels() {
+  local n k
+  for n in $(dk node ls --format '{{.Hostname}}'); do
+    for k in $(dk node inspect -f '{{range $k, $v := .Spec.Labels}}{{$k}} {{end}}' "$n"); do
+      dk node update --label-rm "$k" "$n" >/dev/null
+    done
+    dk node update --availability active "$n" >/dev/null
+  done
+  dk node update --label-add zone=a manager1 >/dev/null
+  dk node update --label-add zone=b worker1 >/dev/null
+  dk node update --label-add zone=c worker2 >/dev/null
+}
+
+# Push the base images (from the host) into the lab registry. Re-seeds when
+# images/webapp changed, so app edits reach the nodes.
+seed_registry() {
+  local pair src dst id n
+  docker build -q -t swarmlab/webapp:1.0 "$LAB_DIR/images/webapp" >/dev/null 2>&1 \
+    || docker build -t swarmlab/webapp:1.0 "$LAB_DIR/images/webapp"
+  id=$(docker image inspect -f '{{.Id}}' swarmlab/webapp:1.0)
+  if [ "$(cat "$STATE_DIR/seed-id" 2>/dev/null)" = "$id" ] &&
+     nx manager1 curl -fs http://registry:5000/v2/lab/webapp/tags/list 2>/dev/null | grep -q '1.0'; then
+    return 0
+  fi
+  info "Seeding the lab registry from host images"
+  for pair in "${SEED_IMAGES[@]}"; do
+    src=${pair%% *}
+    [ "$src" = swarmlab/webapp:1.0 ] && continue
+    docker image inspect "$src" >/dev/null 2>&1 || docker pull -q "$src" >/dev/null || die "cannot pull $src on the host"
+  done
+  # shellcheck disable=SC2046
+  docker save --platform linux/amd64 $(printf '%s\n' "${SEED_IMAGES[@]}" | cut -d' ' -f1) \
+    | docker exec -i lab-manager1 docker load >/dev/null
+  for pair in "${SEED_IMAGES[@]}"; do
+    src=${pair%% *} dst=$REGISTRY/${pair#* }
+    dk tag "$src" "$dst" && dk push -q "$dst" >/dev/null
+  done
+  for n in $(lab_nodes); do dkn "$n" pull -q "$REGISTRY/lab/webapp:1.0" >/dev/null & done
+  wait
+  echo "$id" > "$STATE_DIR/seed-id"
+}
+
+ensure_images() {
+  local n img pids=()
+  seed_registry
+  for n in $(lab_nodes); do
+    (
+      for img in "${BASE_IMAGES[@]}"; do
+        dkn "$n" image inspect "$img" >/dev/null 2>&1 || dkn "$n" pull -q "$img" >/dev/null
+      done
+    ) &
+    pids+=($!)
+  done
+  for p in "${pids[@]}"; do wait "$p" || warn "image pre-pull failed on a node (will retry on next reset)"; done
+}
+
+cmd_up() {
+  local n img
+  docker info >/dev/null 2>&1 || die "cannot talk to Docker on the host"
+  info "Building node image $NODE_IMAGE"
+  docker build -q -t "$NODE_IMAGE" "$LAB_DIR/infra/node" >/dev/null 2>&1 \
+    || docker build -t "$NODE_IMAGE" "$LAB_DIR/infra/node"
+  info "Starting nodes"
+  for img in registry:2 nginx:1.27-alpine; do
+    docker image inspect "$img" >/dev/null 2>&1 || docker pull -q "$img" >/dev/null
+  done
+  compose up -d manager1 worker1 worker2 registry legacy-api
+  for n in "${BASE_NODES[@]}"; do
+    wait_dockerd "$n" 90 || die "dockerd did not start on $n (docker logs lab-$n)"
+  done
+  swarm_init
+  join_node worker1 worker
+  join_node worker2 worker
+  retry 60 nodes_ready 3 || die "nodes did not become Ready"
+  baseline_labels
+  ensure_images
+  echo
+  cmd_status
+  echo
+  ok "Lab is up. Next: ${C_BOLD}./lab list${C_0} and ${C_BOLD}./lab start 01${C_0}"
+}
+
+cmd_destroy() {
+  info "Destroying the lab"
+  compose --profile ha down -v --remove-orphans
+  rm -rf "$STATE_DIR" "${WORK_DIR:?}"/*
+  ok "Gone."
+}
+
+cmd_status() {
+  echo "${C_BOLD}Nodes${C_0}"
+  dk node ls 2>&1 | sed 's/^/  /'
+  echo "${C_BOLD}Services${C_0}"
+  dk service ls 2>&1 | sed 's/^/  /'
+  if [ -f "$STATE_DIR/current" ]; then
+    echo "${C_BOLD}Current scenario${C_0}: $(cat "$STATE_DIR/current")"
+  fi
+}
+
+cmd_sh() {
+  local n=${1:-manager1}
+  docker exec -it -w /lab/workspace "lab-$n" bash
+}
+
+# ---------------------------------------------------------------- reset -----
+# Back to 1 manager + 2 workers: demote/remove extra managers, drop dead node entries.
+cleanup_nodes() {
+  local n id
+  for id in $(dk node ls --filter role=manager --format '{{.ID}} {{.Hostname}}' | awk '$2!="manager1"{print $1}'); do
+    dk node demote "$id" >/dev/null 2>&1 || true
+  done
+  for n in "${HA_NODES[@]}"; do
+    node_exists "$n" || continue
+    info "Removing extra manager $n"
+    dkn "$n" swarm leave --force >/dev/null 2>&1 || true
+    compose --profile ha rm -sfv "$n" >/dev/null 2>&1 || true
+  done
+  for n in worker1 worker2; do join_node "$n" worker 2>/dev/null || true; done
+  retry 90 nodes_ready 3 || warn "not all nodes are Ready"
+  # entries of extra managers, and stale duplicates (same hostname, not Ready)
+  for id in $(dk node ls --format '{{.ID}} {{.Hostname}} {{.Status}}' | awk '
+      { id[NR]=$1; h[NR]=$2; st[NR]=$3; if ($3=="Ready") ready[$2]=1 }
+      END { for (i=1;i<=NR;i++) if (h[i] ~ /^manager[23]$/ || (st[i]!="Ready" && ready[h[i]])) print id[i] }'); do
+    dk node demote "$id" >/dev/null 2>&1 || true
+    dk node rm --force "$id" >/dev/null 2>&1 || true
+  done
+}
+
+swarm_healthy() { dk node ls >/dev/null 2>&1; }
+
+cmd_reset() {
+  local hard=${1:-} n id
+  info "Resetting lab"
+  for n in "${BASE_NODES[@]}"; do
+    node_running "$n" || die "node $n is not running - run ./lab up"
+  done
+  undo_faults
+  for n in $(lab_nodes); do
+    nsh "$n" 'cmp -s /etc/docker/daemon.json /usr/share/swarmlab/daemon.json ||
+              { cp /usr/share/swarmlab/daemon.json /etc/docker/daemon.json; kill -HUP $(pidof dockerd); }'
+  done
+  if [ "$hard" = --hard ]; then
+    info "Rebooting nodes (fresh network namespaces)"
+    docker restart $(lab_nodes | sed 's/^/lab-/') >/dev/null
+    for n in $(lab_nodes); do wait_dockerd "$n" 90; done
+  fi
+  if ! swarm_healthy; then
+    warn "manager1 has no quorum - forcing a new single-manager cluster"
+    dk swarm init --force-new-cluster --advertise-addr 172.30.0.11 >/dev/null
+  fi
+  cleanup_nodes
+  dk stack rm "$STACK" >/dev/null 2>&1 || true
+  ids=$(dk service ls -q)
+  [ -n "$ids" ] && dk service rm $ids >/dev/null
+  for n in "${BASE_NODES[@]}"; do
+    retry 90 sh -c "[ -z \"\$(docker exec lab-$n docker ps -aq --filter label=com.docker.swarm.service.name)\" ]" \
+      || warn "containers still shutting down on $n"
+  done
+  retry 60 sh -c '[ -z "$(docker exec lab-manager1 docker network ls -q --filter label=com.docker.stack.namespace)" ]' || true
+  ids=$(dk config ls -q); [ -n "$ids" ] && dk config rm $ids >/dev/null 2>&1 || true
+  ids=$(dk secret ls -q); [ -n "$ids" ] && dk secret rm $ids >/dev/null 2>&1 || true
+  dk network prune -f >/dev/null 2>&1 || true
+  for n in "${BASE_NODES[@]}"; do
+    # drop volumes and every image a scenario may have added (keeps the base images)
+    nsh "$n" 'docker container prune -f >/dev/null; docker volume prune -af >/dev/null
+              docker images --format "{{.Repository}}:{{.Tag}}" |
+                grep -E "^(lab/|registry:5000/lab/)" | grep -v "^registry:5000/lab/webapp:1.0$" | sort -u |
+                xargs -r docker rmi -f >/dev/null 2>&1' || true
+  done
+  baseline_labels
+  ensure_images
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR"/scenario.*
+  find "$WORK_DIR" -mindepth 1 -delete
+}
+
+# ---------------------------------------------------------------- chaos -----
+cmd_inject() {
+  [ $# -ge 2 ] || die "usage: ./lab inject <node> <fault> [args] (see ./lab help)"
+  local n=$1 f=$2; shift 2
+  node_running "$n" || die "unknown node $n"
+  case $f in
+    latency) inject "$n" "tc qdisc replace dev eth0 root netem delay ${1:?ms}ms ${2:-0}ms" \
+                         "tc qdisc del dev eth0 root" ;;
+    loss)    inject "$n" "tc qdisc replace dev eth0 root netem loss ${1:?percent}%" \
+                         "tc qdisc del dev eth0 root" ;;
+    mtu)     inject "$n" "ip link set eth0 mtu ${1:?bytes}" "ip link set eth0 mtu 1500" ;;
+    block)   inject "$n" "iptables -I INPUT -p ${1:?tcp|udp} --dport ${2:?port} -j DROP" \
+                         "iptables -D INPUT -p $1 --dport $2 -j DROP" ;;
+    partition)
+             inject "$n" "iptables -I INPUT -m iprange --src-range 172.30.0.2-172.30.0.254 -j DROP &&
+                          iptables -I OUTPUT -m iprange --dst-range 172.30.0.2-172.30.0.254 -j DROP" \
+                         "iptables -D INPUT -m iprange --src-range 172.30.0.2-172.30.0.254 -j DROP;
+                          iptables -D OUTPUT -m iprange --dst-range 172.30.0.2-172.30.0.254 -j DROP" ;;
+    dns)     inject "$n" "cp /etc/resolv.conf /etc/resolv.conf.lab && echo 'nameserver 192.0.2.53' > /etc/resolv.conf" \
+                         "cp /etc/resolv.conf.lab /etc/resolv.conf" ;;
+    freeze)  docker pause "lab-$n" >/dev/null
+             echo "docker unpause lab-$n" >> "$STATE_DIR/undo/host.sh" ;;
+    *) die "unknown fault $f" ;;
+  esac
+  ok "injected $f on $n (undo: ./lab clear)"
+}
+
+cmd_clear() {
+  undo_faults
+  ok "faults cleared"
+}
+
+# -------------------------------------------------------------- selftest ----
+cmd_selftest() {
+  local targets=() d name t0 broken fixed results=()
+  if [ "${1:-all}" = all ]; then
+    for d in "$SCEN_DIR"/*/; do targets+=("$(basename "$d")"); done
+  else
+    for d in "$@"; do targets+=("$(basename "$(scenario_dir "$d")")"); done
+  fi
+  for name in "${targets[@]}"; do
+    t0=$SECONDS
+    echo; info "${C_BOLD}selftest $name${C_0}"
+    if ! ( cmd_start "$name" ) >/dev/null; then
+      results+=("$(printf '%-32s SETUP FAILED %4ss' "$name" $((SECONDS - t0)))")
+      continue
+    fi
+    broken=ok; LAB_EXPECT_FAIL=1 cmd_verify >/dev/null 2>&1 && broken="NOT BROKEN"
+    cmd_solve >/dev/null 2>&1 || true
+    fixed=ok; cmd_verify || fixed="NOT FIXED"
+    results+=("$(printf '%-32s broken:%-10s fixed:%-10s %4ss' "$name" "$broken" "$fixed" $((SECONDS - t0)))")
+  done
+  echo; echo "${C_BOLD}Selftest results${C_0}"; printf '  %s\n' "${results[@]}"
+  printf '%s\n' "${results[@]}" | grep -qE 'NOT |FAILED' && return 1 || return 0
+}
+
+# ----------------------------------------------------------------- main -----
+cmd=${1:-help}; shift || true
+case $cmd in
+  up) cmd_up ;;
+  destroy|down) cmd_destroy ;;
+  status|st) cmd_status ;;
+  list|ls) cmd_list ;;
+  start) cmd_start "$@" ;;
+  ticket) cmd_ticket ;;
+  hint) cmd_hint "$@" ;;
+  verify) cmd_verify ;;
+  solution) cmd_solution "$@" ;;
+  solve) cmd_solve ;;
+  deploy) cmd_deploy ;;
+  reset) cmd_reset "$@"; ok "Lab reset" ;;
+  sh|ssh) cmd_sh "$@" ;;
+  inject|chaos) cmd_inject "$@" ;;
+  clear) cmd_clear ;;
+  selftest) cmd_selftest "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

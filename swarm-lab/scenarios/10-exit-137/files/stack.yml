@@ -1,0 +1,13 @@
+services:
+  web:
+    image: registry:5000/lab/webapp:1.0
+    environment:
+      APP_NAME: web
+      CACHE_WARMUP_MB: "192"
+    ports:
+      - "8080:8000"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 128M

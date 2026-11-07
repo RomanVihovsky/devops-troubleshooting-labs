@@ -1,0 +1,10 @@
+
+ swarm-lab node  -  this container is your "VM". Its dockerd is a swarm node.
+ Scenario files: /lab/scenarios   (stack name: app)
+
+ Swarm:   docker node ls | docker service ls | docker service ps --no-trunc app_<svc>
+          docker service logs app_<svc> | docker inspect <container>
+ Net:     ip -br a | ip route | ss -tulpn | tcpdump -ni eth0 | iptables-save | tc qdisc show
+          nsenter -n -t <pid> ...  (enter a container's netns: pid = docker inspect -f '{{.State.Pid}}')
+ System:  df -h | df -i | free -m | dmesg -T | lsof | /sys/fs/cgroup | journal = docker logs on host
+
