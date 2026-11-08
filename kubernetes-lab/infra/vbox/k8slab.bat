@@ -214,7 +214,7 @@ if not exist "%K8SLAB_HOME%" mkdir "%K8SLAB_HOME%"
 set "FREEGB="
 for /f %%g in ('powershell -NoProfile -Command "[int]((Get-Item -LiteralPath $env:K8SLAB_HOME).PSDrive.Free/1GB)"') do set "FREEGB=%%g"
 echo free disk at %K8SLAB_HOME%: %FREEGB% GB  ^(VMs go to %K8SLAB_HOME%\vms^)
-if defined FREEGB if %FREEGB% LSS 35 echo WARNING: less than 35 GB free - the 5 VMs need about 25 GB
+if defined FREEGB if %FREEGB% LSS 50 echo WARNING: less than 50 GB free - the 5 VMs need about 40 GB
 set "HV="
 for /f %%h in ('powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).HypervisorPresent"') do set "HV=%%h"
 if /i "%HV%"=="True" (
@@ -236,7 +236,7 @@ for /f "tokens=1,* delims=:" %%a in ('VBoxManage.exe list hostonlyifs') do (
 exit /b 0
 
 :ensure_base
-for %%d in (cache base logs vms) do if not exist "%K8SLAB_HOME%\%%d" mkdir "%K8SLAB_HOME%\%%d"
+for %%d in (cache base disks logs vms) do if not exist "%K8SLAB_HOME%\%%d" mkdir "%K8SLAB_HOME%\%%d"
 set "IMG=%K8SLAB_HOME%\cache\%IMAGE_FILE%"
 if exist "%VDI%" goto base_type
 if exist "%IMG%" goto base_verify
@@ -258,10 +258,6 @@ VBoxManage.exe clonemedium disk "%IMG%" "%VDI%" --format VDI >nul || exit /b 1
 VBoxManage.exe closemedium disk "%IMG%" >nul 2>&1
 VBoxManage.exe modifymedium disk "%VDI%" --resize %DISK_MB% >nul || exit /b 1
 :base_type
-rem A new disk sits in VirtualBox's global media registry, where it can't be made multiattach. Unregister it
-rem (the file stays): the first VM's "storageattach --mtype multiattach" re-opens it and sets the type.
-VBoxManage.exe showmediuminfo disk "%VDI%" 2>nul | findstr /r /c:"^Type: *multiattach" >nul
-if errorlevel 1 VBoxManage.exe closemedium disk "%VDI%" >nul 2>&1
 fc /b "%KIT%\seed.iso" "%SEED%" >nul 2>&1
 if errorlevel 1 (copy /y "%KIT%\seed.iso" "%SEED%" >nul || echo WARNING: could not update "%SEED%" - is it in use?)
 exit /b 0
@@ -277,7 +273,12 @@ VBoxManage.exe modifyvm "%~1" --cpus %~2 --memory %~3 --vram 16 --graphicscontro
 VBoxManage.exe modifyvm "%~1" --nic1 nat --nic-type1 82540EM --mac-address1 %~5 --nic2 hostonly --nic-type2 82540EM --host-only-adapter2 "%HOSTONLY%" --mac-address2 %~6 || goto create_fail
 VBoxManage.exe modifyvm "%~1" --uart1 0x3F8 4 --uart-mode1 file "%K8SLAB_HOME%\logs\%~1-console.log" || goto create_fail
 VBoxManage.exe storagectl "%~1" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on || goto create_fail
-VBoxManage.exe storageattach "%~1" --storagectl SATA --port 0 --device 0 --type hdd --medium "%VDI%" --mtype multiattach || goto create_fail
+rem each VM gets its own full copy of the base disk (VBoxManage can't make a new disk multiattach on 7.2)
+set "DISK=%K8SLAB_HOME%\disks\%~1.vdi"
+if exist "%DISK%" VBoxManage.exe closemedium disk "%DISK%" --delete >nul 2>&1
+if exist "%DISK%" del "%DISK%"
+VBoxManage.exe clonemedium disk "%VDI%" "%DISK%" --format VDI >nul || goto create_fail
+VBoxManage.exe storageattach "%~1" --storagectl SATA --port 0 --device 0 --type hdd --medium "%DISK%" || goto create_fail
 VBoxManage.exe storageattach "%~1" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "%SEED%" || goto create_fail
 VBoxManage.exe startvm "%~1" --type headless >nul || goto create_fail
 exit /b 0

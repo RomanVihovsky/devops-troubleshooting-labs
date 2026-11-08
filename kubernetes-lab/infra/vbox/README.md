@@ -34,13 +34,13 @@ First time
 What create does
 ----------------
 - Downloads the pinned Ubuntu 24.04 cloud VMDK (URL + SHA256 in kit.env) to %USERPROFILE%\k8slab\cache
-  and converts it once to base\k8slab-base-<release>.vdi (40 GB, multiattach: every VM writes to its
-  own differencing disk, the base stays untouched).
+  and converts it once to base\k8slab-base-<release>.vdi (40 GB virtual, dynamic). Every VM gets its
+  own full copy in disks\<vm>.vdi (~2-3 GB each at first); the base stays untouched.
 - Per VM: Ubuntu_64, CPUs/RAM from nodes.csv, nested VT-x/AMD-V off, NIC1 NAT (internet),
   NIC2 host-only with a fixed MAC (the VM finds its name and IP by that MAC), serial console
   logged to logs\<vm>-console.log, seed.iso as DVD (cloud-init: user "lab" + the desktop's SSH key).
 - Everything lives under %USERPROFILE%\k8slab (K8SLAB_HOME): cache\ (image), base\ (base disk, seed),
-  vms\ (the VMs, group /k8slab in VirtualBox Manager), logs\ (serial consoles). VirtualBox's own default
+  disks\ (one disk per VM), vms\ (the VMs, group /k8slab in VirtualBox Manager), logs\ (serial consoles). VirtualBox's own default
   machine folder is not used. Set K8SLAB_HOME=D:\k8slab before running the script to use another drive.
 - No admin rights needed: run it as the same Windows user that runs VirtualBox Manager, so the VMs
   show up there.

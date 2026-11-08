@@ -81,7 +81,7 @@ cmd_check() {
   mkdir -p "$K8SLAB_HOME"
   free=$(df -Pk "$K8SLAB_HOME" | awk 'NR==2{print int($4/1048576)}')
   echo "free disk at $K8SLAB_HOME: ${free} GB (VMs go to $K8SLAB_HOME/vms)"
-  [ "$free" -ge 35 ] || warn "less than 35 GB free - the 5 VMs need about 25 GB"
+  [ "$free" -ge 50 ] || warn "less than 50 GB free - the 5 VMs need about 40 GB"
   if lsmod 2>/dev/null | grep -q '^kvm'; then warn "the kvm module is loaded - VirtualBox and KVM can't both use VT-x/AMD-V"; fi
   echo "OK"
 }
@@ -90,7 +90,7 @@ sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum 
 
 ensure_base() {
   local img="$K8SLAB_HOME/cache/$IMAGE_FILE" sum
-  mkdir -p "$K8SLAB_HOME"/{cache,base,logs,vms}
+  mkdir -p "$K8SLAB_HOME"/{cache,base,disks,logs,vms}
   if [ ! -f "$VDI" ]; then
     if [ ! -f "$img" ]; then
       say "downloading $IMAGE_URL (~600 MB, once)"
@@ -102,11 +102,6 @@ ensure_base() {
     vbm clonemedium disk "$img" "$VDI" --format VDI >/dev/null
     vbm closemedium disk "$img" >/dev/null 2>&1 || true
     vbm modifymedium disk "$VDI" --resize "$DISK_MB" >/dev/null
-  fi
-  # A new disk sits in VirtualBox's global media registry, where it can't be made multiattach. Unregister it
-  # (the file stays): the first VM's "storageattach --mtype multiattach" re-opens it and sets the type.
-  if ! { vbm showmediuminfo disk "$VDI" 2>/dev/null || true; } | grep -Eq '^Type: +multiattach'; then
-    vbm closemedium disk "$VDI" >/dev/null 2>&1 || true
   fi
   if ! cmp -s "$KIT/seed.iso" "$SEED"; then cp "$KIT/seed.iso" "$SEED" || warn "could not update $SEED"; fi
 }
@@ -136,7 +131,11 @@ configure_vm() {   # same args as create_vm; every step must succeed (set -e is 
     "${nic2[@]}" --nic-type2 82540EM --mac-address2 "$6" \
     --uart1 0x3F8 4 --uart-mode1 file "$K8SLAB_HOME/logs/$n-console.log" || return 1
   vbm storagectl "$n" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on || return 1
-  vbm storageattach "$n" --storagectl SATA --port 0 --device 0 --type hdd --medium "$VDI" --mtype multiattach || return 1
+  # each VM gets its own full copy of the base disk (VBoxManage can't make a new disk multiattach on 7.2)
+  local disk="$K8SLAB_HOME/disks/$n.vdi"
+  if [ -e "$disk" ]; then vbm closemedium disk "$disk" --delete >/dev/null 2>&1 || rm -f "$disk"; fi
+  vbm clonemedium disk "$VDI" "$disk" --format VDI >/dev/null || return 1
+  vbm storageattach "$n" --storagectl SATA --port 0 --device 0 --type hdd --medium "$disk" || return 1
   vbm storageattach "$n" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "$SEED" || return 1
   vbm startvm "$n" --type headless >/dev/null || return 1
 }

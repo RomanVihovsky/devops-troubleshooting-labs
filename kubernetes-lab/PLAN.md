@@ -92,7 +92,7 @@ Network decisions:
 |---|---|
 | `nodes.csv` | Single source of truth: name, cpus, mem, ip, NAT MAC, host-only MAC, role. Read by both scripts, `./lab` and the seed |
 | `k8slab.bat` / `k8slab.sh` | Same commands: `check`, `create`, `start`, `stop`, `status`, `snapshot`, `restore`, `destroy`. Only VBoxManage, only `k8s-*` VMs from `nodes.csv`, no admin rights |
-| Ubuntu image | Release VMDK + SHA256 from `versions.env`, downloaded once, converted to one **multiattach** base VDI; each VM gets a differencing disk |
+| Ubuntu image | Release VMDK + SHA256 from `versions.env`, downloaded once, converted to one base VDI; each VM gets its own full copy (`clonemedium`, ~2-3 GB each at first) |
 | `seed.iso` | One generic cloud-init NoCloud seed for all VMs, built by `tools/mkseed.py` (pycdlib wheel, no pip/sudo). It holds user `lab` + the desktop's key, and network-config that matches both NICs of every node by MAC. `k8slab-identity` sets the hostname and `/etc/hosts` from the NIC2 MAC |
 | Delivery | `./lab vm kit` copies the kit into the VirtualBox shared folder when writable, otherwise leaves it in `.state/kit/` |
 
@@ -197,7 +197,7 @@ X09, all in wave 1.
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| **0 Kit + spike** | Kit, seed, `./lab vm kit/seedtest/wait/status`; you run `k8slab.bat create gw cp1` | Correct hostname + IP; SSH from the desktop; each VM has its own diff disk over one base; kit `snapshot`/`restore` work; 30-min soak with no VirtualBox halt; NEM status known |
+| **0 Kit + spike** | Kit, seed, `./lab vm kit/seedtest/wait/status`; you run `k8slab.bat create gw cp1` | Correct hostname + IP; SSH from the desktop; each VM has its own disk cloned from one base; kit `snapshot`/`restore` work; 30-min soak with no VirtualBox halt; NEM status known |
 | **1 Fleet + cluster** | All 5 VMs, provision, 1.36 → 1.37, addons, `doctor`, `golden` | Doctor green. Broken apiserver, etcd and kubelet all come back via `cluster reset` in ≤3 min. Doctor green with NAT egress dropped. 2-h soak within budget |
 | **2 GitOps + secrets** | Gitea, charts, Argo CD, Sealed Secrets, ESO + OpenBao | labapp Synced/Healthy with 1 SealedSecret + 1 ExternalSecret; survives `cluster reset` |
 | **3 Framework** | CLI, helpers, reset ladder, 4 pilots (ns/node/cluster/GitOps) | Pilots pass selftest twice in a row |
@@ -213,7 +213,7 @@ X09, all in wave 1.
 |---|---|
 | RAM | 19 GB of the ~32 GB free (+2 GB with w4) |
 | vCPU | 9 + desktop 8 = 17 on 16 threads. Mild overcommit; the soak decides whether the desktop drops to 6 |
-| Windows disk | ~25 GB (base ~1.5, diffs ~3-4 each, gw data ~3); `check` warns below 35 GB free |
+| Windows disk | ~40 GB (base ~2.5, a full clone per VM ~2.5 + growth ~3-4 each, gw data ~3); `check` warns below 50 GB free |
 | Desktop disk | ≤1.5 GB of the 12 GB free (CLIs, charts, golden ~0.3 GB) |
 | Downloads | ~5 GB once, fetched by gw and shared with the nodes |
 
@@ -221,7 +221,7 @@ X09, all in wave 1.
 
 | Risk | Mitigation |
 |---|---|
-| Multiattach/snapshot semantics | Phase 0 gate; fallback: a full disk clone per VM (+~3 GB each) |
+| VirtualBox disk/snapshot semantics | Phase 0 gate. Multiattach was dropped after the first Windows runs; full per-VM clones are used instead |
 | etcd-restore reset leaves stale state | `doctor` after each reset; cluster-level scenarios selftested twice; fallback `rebuild` |
 | The `.bat` can't be tested on this Linux desktop | Kept plain and identical in logic to the shellchecked `.sh` twin; `check` first; Phase 0 runs it for real |
 | VirtualBox on the Windows hypervisor (NEM, "turtle") | `check` warns; turning off Hyper-V/VBS is your call |
@@ -264,6 +264,10 @@ Settled on 2026-11-08 by the v2 decisions above.
 - **Second run**: `createvm` failed with access denied. VirtualBox's default machine folder pointed into another
   Windows profile (`C:\Users\evrod\...`). The VMs now go to `%K8SLAB_HOME%\vms` via `--basefolder`;
   VirtualBox's default folder is never used.
+- **Third run**: `storageattach --mtype multiattach` hit the same global-registry error even after
+  `closemedium`: on 7.2, reopening a disk puts it straight back into the global registry.
+  **Multiattach dropped**: every VM now gets a full `clonemedium` copy of the base in
+  `%K8SLAB_HOME%\disks\` (~2-3 GB each at first).
 - **Next (you)**:
   1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
   2. `./lab vm kit`.

@@ -91,11 +91,11 @@ In `cmd` the `.\` prefix isn't needed. `seed.iso` holds the public key of the de
 - `check`:
   - VirtualBox ≥ 7.0;
   - the host-only adapter that owns 192.168.56.1;
-  - ≥ 35 GB free under `%USERPROFILE%\k8slab`;
+  - ≥ 50 GB free under `%USERPROFILE%\k8slab`;
   - a warning if the Windows hypervisor is active.
 - `create`:
   - downloads the Ubuntu 24.04 VMDK once (~600 MB) and verifies its SHA256;
-  - converts it to one multiattach base disk;
+  - converts it to one base disk, then gives every VM its own full copy;
   - creates the 5 VMs (group `/k8slab`) and boots them headless.
 
 No admin rights are needed. Run it as the same Windows user that runs VirtualBox Manager, so the VMs show up
@@ -115,7 +115,7 @@ there (group `k8slab`). To create only some of them: `k8slab.bat create gw cp1`.
 |---|---|
 | Physical RAM | 19 GB for the 5 VMs (+2 GB with w4), on top of the desktop VM and Windows |
 | vCPU | 9 for the VMs. Desktop 8 + 9 = 17 on a 16-thread CPU is mild overcommit; lower the desktop VM to 6 vCPU if things stall |
-| Windows disk | ~25 GB under `%USERPROFILE%\k8slab` (`cache`, `base`, `vms`, `logs`); VirtualBox's default machine folder is not used |
+| Windows disk | ~40 GB under `%USERPROFILE%\k8slab` (`cache`, `base`, `disks`, `vms`, `logs`); VirtualBox's default machine folder is not used |
 
 ## Day to day (on the VirtualBox host)
 
