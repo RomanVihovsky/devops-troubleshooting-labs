@@ -268,6 +268,9 @@ Settled on 2026-11-08 by the v2 decisions above.
   `closemedium`: on 7.2, reopening a disk puts it straight back into the global registry.
   **Multiattach dropped**: every VM now gets a full `clonemedium` copy of the base in
   `%K8SLAB_HOME%\disks\` (~2-3 GB each at first).
+- **Fourth run**: `k8slab.bat create` created and started all 5 VMs (gw, cp1, w1-w3). The `.bat` works end to end
+  on VirtualBox 7.2.20. Blocked next: the desktop VM still has no host-only NIC, so `./lab vm wait` can't
+  reach the VMs yet.
 - **Next (you)**:
   1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
   2. `./lab vm kit`.
