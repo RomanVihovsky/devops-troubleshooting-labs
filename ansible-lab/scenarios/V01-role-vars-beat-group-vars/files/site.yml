@@ -1,0 +1,5 @@
+- name: App servers
+  hosts: web
+  become: true
+  roles:
+    - appserver

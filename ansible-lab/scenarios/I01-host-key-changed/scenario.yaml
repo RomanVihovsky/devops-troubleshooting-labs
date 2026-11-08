@@ -1,0 +1,8 @@
+id: I01
+title: UNREACHABLE - Host key verification failed after a rebuild
+kind: incident
+level: 1
+domain: inventory
+nodes: [web1, web2]
+wave: 1
+est: 10m

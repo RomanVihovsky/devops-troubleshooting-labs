@@ -1,0 +1,45 @@
+# written for ansible-core 2.16 (2023) - see the porting guides for 2.19, 2.20, 2.21, 2.22
+- name: Legacy web baseline
+  hosts: web
+  become: true
+  vars:
+    app_port: 8080
+    create_dirs: "yes"
+  tasks:
+    - name: Sanity check
+      ansible.builtin.assert:
+        that: "{{ app_port }} > 1024"
+
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+
+    - name: Spool directories
+      ansible.builtin.file:
+        path: "/var/spool/acme/q{{ item }}"
+        state: directory
+        mode: "0750"
+      loop: "{{ range(1, 4) }}"
+      when: create_dirs
+
+    - name: Config files
+      ansible.builtin.copy:
+        dest: "/etc/acme/{{ item.name }}"
+        content: "managed by Ansible\n"
+        mode: "{{ item.mode }}"
+      loop:
+        - {name: app.conf, mode: "0640"}
+        - {name: legacy.conf, mode: "{{ omit }}"}
+
+    - name: OS banner
+      ansible.builtin.copy:
+        dest: /etc/acme/os.txt
+        content: "{{ ansible_distribution }} {{ ansible_distribution_major_version }} ({{ play_hosts | length }} hosts in play)\n"
+        mode: "0644"
+
+    - name: Package mirror reachable
+      ansible.builtin.uri:
+        url: http://repo.acme.internal/
+        follow_redirects: yes

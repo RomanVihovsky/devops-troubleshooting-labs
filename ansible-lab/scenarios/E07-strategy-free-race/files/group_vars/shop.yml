@@ -1,0 +1,3 @@
+# seconds the node needs for each step (measured on prod hardware, see OPS-3011)
+shop_warmup_seconds: 1
+shop_migrate_seconds: 1

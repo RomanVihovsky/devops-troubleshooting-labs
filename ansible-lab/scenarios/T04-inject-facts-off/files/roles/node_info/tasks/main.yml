@@ -1,0 +1,23 @@
+- name: OS-specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Tools
+  ansible.builtin.package:
+    name: "{{ node_info_packages }}"
+    state: present
+
+- name: Config directory
+  ansible.builtin.file:
+    path: /etc/acme
+    state: directory
+    mode: "0755"
+
+- name: Node record for the CMDB
+  ansible.builtin.template:
+    src: node.json.j2
+    dest: /etc/acme/node.json
+    mode: "0644"
+
+- name: Run mode
+  ansible.builtin.debug:
+    msg: "check mode: {{ ansible_check_mode }}, Rocky: {{ ansible_distribution == 'Rocky' }}"

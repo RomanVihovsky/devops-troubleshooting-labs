@@ -1,0 +1,8 @@
+id: L16
+title: Cloud inventory - amazon.aws.aws_ec2 against a fake AWS
+kind: learn
+level: 2
+domain: inventory
+nodes: [web1, web2, web3, db1]
+wave: 2
+est: 30m

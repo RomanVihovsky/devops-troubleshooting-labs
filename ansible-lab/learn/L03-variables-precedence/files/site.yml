@@ -1,0 +1,5 @@
+- name: MOTD
+  hosts: web
+  become: true
+  roles:
+    - motd

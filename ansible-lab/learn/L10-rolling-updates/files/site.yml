@@ -1,0 +1,22 @@
+- name: Load balancer
+  hosts: lb
+  become: true
+  roles:
+    - haproxy
+
+- name: App nodes
+  hosts: app
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+- name: Current release
+  ansible.builtin.import_playbook: deploy.yml

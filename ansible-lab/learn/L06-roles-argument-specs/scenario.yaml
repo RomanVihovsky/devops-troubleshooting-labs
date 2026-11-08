@@ -1,0 +1,7 @@
+id: L06
+title: Roles with argument specs and OS-specific vars
+kind: learn
+level: 2
+domain: roles
+nodes: [web1, web2]
+est: 25m

@@ -1,0 +1,22 @@
+- name: ACME app secrets
+  hosts: web
+  become: true
+  tasks:
+    - name: Read the bootstrap token
+      ansible.builtin.slurp:
+        src: /etc/acme/bootstrap-token
+      register: token_raw
+
+    - name: Token
+      ansible.builtin.set_fact:
+        api_token: "{{ token_raw.content | b64decode | trim }}"
+
+    - name: Deploy log
+      ansible.builtin.debug:
+        msg: "deploying with token {{ api_token }}"
+
+    - name: App environment
+      ansible.builtin.template:
+        src: templates/app.env.j2
+        dest: /etc/acme/app.env
+        mode: "0600"

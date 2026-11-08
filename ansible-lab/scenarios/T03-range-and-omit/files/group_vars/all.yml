@@ -1,0 +1,4 @@
+workers_count: 3
+workers_files:
+  - {name: queue, content: "size=100\n", owner: root}
+  - {name: limits, content: "max_jobs=4\n", owner: "{{ omit }}"}   # owner: whoever runs the deploy

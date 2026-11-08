@@ -1,0 +1,8 @@
+galaxy_info:
+  author: platform
+  description: logrotate policy for ACME apps
+  license: MIT
+  min_ansible_version: "2.16"
+  role_name: logrotate
+  namespace: acme
+dependencies: []

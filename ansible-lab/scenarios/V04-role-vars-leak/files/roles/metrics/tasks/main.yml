@@ -1,0 +1,22 @@
+- name: Install nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: metrics site
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/metrics.conf
+    content: |
+      server {
+          listen {{ port }};
+          server_name metrics;
+          location / { return 200 "metrics up\n"; }
+      }
+    mode: "0644"
+  notify: Reload nginx metrics
+
+- name: Run nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

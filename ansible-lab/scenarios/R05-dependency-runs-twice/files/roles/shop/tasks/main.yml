@@ -1,0 +1,11 @@
+- name: shop vhost
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/shop.conf
+    content: |
+      server {
+          listen 80;
+          server_name shop.acme.test;
+          location / { return 200 "shop\n"; }
+      }
+    mode: "0644"
+  notify: Reload nginx

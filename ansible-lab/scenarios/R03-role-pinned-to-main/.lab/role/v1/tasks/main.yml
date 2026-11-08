@@ -1,0 +1,5 @@
+- name: Login banner
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    content: "{{ banner_text }}\n"
+    mode: "0644"

@@ -1,0 +1,14 @@
+---
+# Self-healing for the web tier. Activation "web-selfheal" (ans-eda): ./lab eda logs | restart
+- name: Self-healing web tier
+  hosts: web
+  sources:
+    - ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    - name: Heal nginx
+      condition: event.payload.check == "nginx" and event.payload.status == "down"
+      action:
+        run_playbook:
+          name: remediate/nginx.yml

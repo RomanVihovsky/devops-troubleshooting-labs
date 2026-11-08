@@ -1,0 +1,4 @@
+# managed by Ansible
+[database]
+host = {{ hostvars[groups["db"][0]]["ansible_facts"]["all_ipv4_addresses"][0] }}
+port = 5432

@@ -1,0 +1,2 @@
+# release 2.0.0-rc1 (build 9015) - shipped with a broken nginx snippet
+app_nginx_extra: "proxy_buffers 8;"

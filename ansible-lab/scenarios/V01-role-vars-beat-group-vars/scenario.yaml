@@ -1,0 +1,8 @@
+id: V01
+title: Our group_vars change has no effect
+kind: incident
+level: 1
+domain: variables
+nodes: [web1, web2]
+wave: 1
+est: 10m

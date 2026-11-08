@@ -1,0 +1,8 @@
+id: R02
+title: "--tags deploy reports ok and deploys nothing"
+kind: incident
+level: 2
+domain: roles
+nodes: [app1]
+wave: 1
+est: 15m

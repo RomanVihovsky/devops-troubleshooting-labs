@@ -1,0 +1,47 @@
+- name: Validate settings
+  ansible.builtin.assert:
+    that:
+      - app_name
+      - app_port
+    fail_msg: app_name and app_port must be set
+
+- name: Install nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Site config
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: /etc/nginx/conf.d/site.conf
+    mode: "0644"
+  notify: Reload nginx
+
+- name: TLS config
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/tls-policy.conf
+    content: |
+      # managed by Ansible
+      ssl_protocols TLSv1.2 TLSv1.3;
+    mode: "0644"
+  when: enable_tls
+  notify: Reload nginx
+
+- name: Message of the day
+  ansible.builtin.copy:
+    dest: /etc/motd
+    content: "{{ app_name }} web node - managed by Ansible\n"
+    mode: "0644"
+  when: enable_motd
+
+- name: Check nginx config
+  ansible.builtin.command: nginx -t
+  register: nginx_test
+  changed_when: false
+  failed_when: nginx_test.rc
+
+- name: Run nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

@@ -1,0 +1,28 @@
+- name: App node
+  hosts: app
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: App config
+      ansible.builtin.copy:
+        dest: /etc/acme/app.conf
+        content: "mode=production\n"
+        mode: "0644"
+    - name: App user
+      ansible.builtin.shell: id acme || useradd --system --shell /usr/sbin/nologin acme
+    - name: Release directory
+      ansible.builtin.command: mkdir -p /opt/acme/current
+    - name: Unpack the release
+      ansible.builtin.command: tar -xzf /opt/acme/release-1.0.tar.gz -C /opt/acme/current
+    - name: Enable the config
+      ansible.builtin.shell: ln -sf /etc/acme/app.conf /etc/acme/enabled.conf
+    - name: Kernel version for the inventory report
+      ansible.builtin.command: uname -r
+      register: e01_kernel
+    - name: Inventory report
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} runs kernel {{ e01_kernel.stdout }}"

@@ -1,0 +1,7 @@
+id: L10
+title: Rolling updates with drain, health gates and run_once
+kind: learn
+level: 3
+domain: orchestration
+nodes: [lb1, app1, app2, db1]
+est: 35m

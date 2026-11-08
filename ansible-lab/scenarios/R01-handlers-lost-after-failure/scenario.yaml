@@ -1,0 +1,8 @@
+id: R01
+title: The smoke check fails forever after one failed deploy
+kind: incident
+level: 2
+domain: roles
+nodes: [web1]
+wave: 1
+est: 20m

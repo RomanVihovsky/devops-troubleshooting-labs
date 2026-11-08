@@ -1,0 +1,22 @@
+- name: Install nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: shop site
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/shop.conf
+    content: |
+      server {
+          listen {{ port }};
+          server_name shop;
+          location / { return 200 "shop\n"; }
+      }
+    mode: "0644"
+  notify: Reload nginx shop
+
+- name: Run nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

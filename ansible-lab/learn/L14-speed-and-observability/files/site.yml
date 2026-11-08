@@ -1,0 +1,39 @@
+- name: Base
+  hosts: web
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: Node info
+      ansible.builtin.copy:
+        dest: /etc/acme/node.txt
+        content: "{{ ansible_facts['hostname'] }} {{ ansible_facts['distribution'] }}\n"
+        mode: "0644"
+
+- name: Logging
+  hosts: web
+  become: true
+  tasks:
+    - name: Log directory
+      ansible.builtin.file:
+        path: /var/log/acme
+        state: directory
+        mode: "0750"
+    - name: Logrotate policy
+      ansible.builtin.copy:
+        dest: /etc/acme/logrotate.conf
+        content: "/var/log/acme/*.log { daily rotate 7 }\n"
+        mode: "0644"
+
+- name: Inventory report
+  hosts: web
+  become: true
+  tasks:
+    - name: Report
+      ansible.builtin.copy:
+        dest: /etc/acme/report.txt
+        content: "{{ ansible_facts['os_family'] }} {{ ansible_facts['processor_vcpus'] }} vCPU\n"
+        mode: "0644"

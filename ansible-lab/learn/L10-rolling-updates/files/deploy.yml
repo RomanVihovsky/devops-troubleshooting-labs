@@ -1,0 +1,27 @@
+# usage: ansible-playbook deploy.yml -e app_release=<version>
+- name: Deploy a release
+  hosts: app
+  become: true
+  tasks:
+    - name: DB migration
+      ansible.builtin.shell: echo "migrate to {{ app_release }} at $(date +%s)" >> /var/lib/acme/migrations.log
+      delegate_to: db1
+
+    - name: Release marker
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/version.txt
+        content: "{{ app_release }}\n"
+        mode: "0644"
+
+    - name: App config
+      ansible.builtin.template:
+        src: templates/app.conf.j2
+        dest: /etc/nginx/conf.d/app.conf
+        mode: "0644"
+      notify: Restart nginx
+
+  handlers:
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted

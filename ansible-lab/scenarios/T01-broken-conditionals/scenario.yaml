@@ -1,0 +1,8 @@
+id: T01
+title: After the upgrade - Conditional result was 'yes' of type 'str'
+kind: incident
+level: 1
+domain: templating
+nodes: [web1, web2]
+wave: 1
+est: 15m

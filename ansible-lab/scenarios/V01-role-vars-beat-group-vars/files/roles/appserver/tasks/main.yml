@@ -1,0 +1,11 @@
+- name: Config directory
+  ansible.builtin.file:
+    path: /etc/acme
+    state: directory
+    mode: "0755"
+
+- name: Appserver config
+  ansible.builtin.template:
+    src: appserver.ini.j2
+    dest: "{{ appserver_config }}"
+    mode: "0644"

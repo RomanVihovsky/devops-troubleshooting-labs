@@ -1,0 +1,5 @@
+roles:
+  - name: acme.banner
+    src: https://git.acme.example/platform/ansible-role-banner.git
+    scm: git
+    version: main

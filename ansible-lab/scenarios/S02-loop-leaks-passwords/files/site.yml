@@ -1,0 +1,14 @@
+- name: Onboarding
+  hosts: web
+  become: true
+  vars:
+    onboarding_users: "{{ lookup('ansible.builtin.file', '.onboarding/users.json') | from_json }}"
+  tasks:
+    - name: Accounts with their initial passwords
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        comment: "{{ item.full_name }}"
+        shell: /bin/bash
+        password: "{{ item.password | password_hash('sha512') }}"
+        update_password: on_create
+      loop: "{{ onboarding_users }}"

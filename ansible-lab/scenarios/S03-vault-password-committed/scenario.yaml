@@ -1,0 +1,8 @@
+id: S03
+title: The vault password is committed to git
+kind: incident
+level: 2
+domain: secrets
+nodes: [web1]
+wave: 1
+est: 25m

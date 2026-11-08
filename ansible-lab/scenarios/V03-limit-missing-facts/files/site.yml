@@ -1,0 +1,24 @@
+- name: Database
+  hosts: db
+  become: true
+  tasks:
+    - name: DB marker
+      ansible.builtin.copy:
+        dest: /etc/acme-db
+        content: "db node\n"
+        mode: "0644"
+
+- name: Web
+  hosts: web
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: DB connection settings
+      ansible.builtin.template:
+        src: templates/db.conf.j2
+        dest: /etc/acme/db.conf
+        mode: "0644"

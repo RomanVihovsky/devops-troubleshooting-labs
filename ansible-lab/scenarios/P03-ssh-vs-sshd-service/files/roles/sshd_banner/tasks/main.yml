@@ -1,0 +1,12 @@
+- name: Banner text
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    content: "{{ sshd_banner_text }}\n"
+    mode: "0644"
+
+- name: Banner in sshd
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/20-banner.conf
+    content: "Banner /etc/issue.net\n"
+    mode: "0644"
+  notify: Restart sshd

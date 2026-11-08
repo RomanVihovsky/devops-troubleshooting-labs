@@ -1,0 +1,15 @@
+# EC2 inventory for the shop. Credentials and the API endpoint come from the CI runner's environment.
+plugin: amazon.aws.aws_ec2
+regions:
+  - eu-west-1
+filters:
+  tag:Env: prod
+hostnames:
+  - tag:Name
+compose:
+  ansible_host: private_ip_address
+use_deprecated_tags: false
+keyed_groups:
+  - key: ec2_tags.Role
+    prefix: ""
+    separator: ""

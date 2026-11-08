@@ -1,0 +1,8 @@
+id: X05
+title: "Collection CI red: ansible-test sanity fails on acme.ops.app_flag"
+kind: incident
+level: 2
+domain: pipeline
+nodes: [web1]
+wave: 2
+est: 25m

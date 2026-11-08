@@ -1,0 +1,4 @@
+team:
+  - {name: alice, state: present, admin: true}
+  - {name: bob, state: present, admin: false}
+  - {name: carol, state: absent, admin: false}

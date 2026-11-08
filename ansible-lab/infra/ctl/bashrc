@@ -1,0 +1,4 @@
+# ansible-lab controller shell
+export PS1='\[\e[35m\](ansible-lab${LAB_ID:+:$LAB_ID})\[\e[0m\] \w \$ '
+export ANSIBLE_FORCE_COLOR=1
+alias ap=ansible-playbook ai=ansible-inventory av=ansible-vault ag=ansible-galaxy

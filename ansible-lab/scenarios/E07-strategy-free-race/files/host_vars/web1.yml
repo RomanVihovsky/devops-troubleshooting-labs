@@ -1,0 +1,2 @@
+# web1 holds the order history - its local migration is the slow one
+shop_migrate_seconds: 10

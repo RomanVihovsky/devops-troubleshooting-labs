@@ -1,0 +1,4 @@
+nginx_settings:
+  gzip: "on"
+  keepalive_timeout: 65
+  client_max_body_size: 10m

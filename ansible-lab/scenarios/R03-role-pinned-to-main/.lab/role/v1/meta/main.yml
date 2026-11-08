@@ -1,0 +1,11 @@
+galaxy_info:
+  role_name: banner
+  namespace: acme
+  author: ACME platform team
+  description: Login banner (/etc/issue.net)
+  license: MIT
+  min_ansible_version: "2.19"
+  platforms:
+    - {name: Debian, versions: [bookworm]}
+    - {name: EL, versions: ["9"]}
+dependencies: []

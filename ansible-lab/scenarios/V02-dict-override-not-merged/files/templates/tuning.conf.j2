@@ -1,0 +1,4 @@
+# managed by Ansible
+{% for key, value in nginx_settings | dictsort %}
+{{ key }} {{ value }};
+{% endfor %}

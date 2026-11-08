@@ -1,0 +1,8 @@
+id: E08
+title: After the LB rebuild only one web node is in rotation - every deploy is green
+kind: incident
+level: 2
+domain: execution
+nodes: [lb1, web1, web2, web3]
+wave: 2
+est: 20m

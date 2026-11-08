@@ -1,0 +1,18 @@
+# Run by the EDA activation (rulebooks/web.yml). ansible_eda.event = the alert that fired the rule.
+- name: Heal nginx
+  hosts: "{{ ansible_eda.event.payload.host }}"
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+    - name: Wait until the shop answers
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/
+      register: shop_page
+      until: shop_page.status == 200
+      retries: 10
+      delay: 1

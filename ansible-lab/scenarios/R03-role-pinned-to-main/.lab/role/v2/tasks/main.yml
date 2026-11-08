@@ -1,0 +1,8 @@
+- name: Login banner
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    content: |
+      {% for line in banner_lines %}
+      {{ line }}
+      {% endfor %}
+    mode: "0644"

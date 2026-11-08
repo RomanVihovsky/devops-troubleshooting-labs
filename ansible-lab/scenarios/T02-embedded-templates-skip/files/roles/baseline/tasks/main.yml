@@ -1,0 +1,30 @@
+- name: Config directory
+  ansible.builtin.file:
+    path: /etc/acme
+    state: directory
+    mode: "0755"
+
+- name: Login banner
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    content: "{{ baseline_banner }}\n"
+    mode: "0644"
+
+- name: Kernel hardening settings
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.d/90-acme.conf
+    regexp: "^{{ item.name }} ="
+    line: "{{ item.name }} = {{ item.value }}"
+    create: true
+    mode: "0644"
+  loop: "{{ baseline_sysctl }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: "{{ item.enabled }}"
+
+- name: Production hardening marker
+  ansible.builtin.copy:
+    dest: /etc/acme/prod-hardening
+    content: "level=strict\n"
+    mode: "0644"
+  when: "'{{ inventory_hostname }}' in groups['prod']"

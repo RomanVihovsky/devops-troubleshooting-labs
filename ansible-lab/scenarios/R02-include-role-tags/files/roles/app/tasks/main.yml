@@ -1,0 +1,17 @@
+- name: App directory
+  ansible.builtin.file:
+    path: /opt/app
+    state: directory
+    mode: "0755"
+
+- name: App release
+  ansible.builtin.copy:
+    dest: /opt/app/VERSION
+    content: "{{ app_version }}\n"
+    mode: "0644"
+
+- name: App config
+  ansible.builtin.template:
+    src: app.ini.j2
+    dest: /opt/app/app.ini
+    mode: "0644"

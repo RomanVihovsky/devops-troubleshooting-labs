@@ -1,0 +1,5 @@
+- name: SSH hardening
+  hosts: ssh_hosts
+  become: true
+  roles:
+    - sshd_hardening

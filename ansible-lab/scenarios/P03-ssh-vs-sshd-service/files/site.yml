@@ -1,0 +1,5 @@
+- name: SSH login banner
+  hosts: all
+  become: true
+  roles:
+    - sshd_banner

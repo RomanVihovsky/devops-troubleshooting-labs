@@ -1,0 +1,23 @@
+- name: Web nodes
+  hosts: web
+  become: true
+  roles:
+    - acme.logrotate
+  tasks:
+    - name: Deploy user
+      ansible.builtin.user:
+        name: deploy
+        shell: /bin/bash
+
+    - name: Deploy key
+      ansible.posix.authorized_key:
+        user: deploy
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFA ci@acme"
+
+    - name: App settings
+      community.general.ini_file:
+        path: /etc/acme/app.ini
+        section: http
+        option: port
+        value: "8080"
+        mode: "0644"

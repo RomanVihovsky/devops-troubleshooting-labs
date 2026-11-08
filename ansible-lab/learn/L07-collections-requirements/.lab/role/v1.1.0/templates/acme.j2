@@ -1,0 +1,6 @@
+/var/log/acme/*.log {
+    daily
+    rotate {{ logrotate_keep }}
+    compress
+    missingok
+}

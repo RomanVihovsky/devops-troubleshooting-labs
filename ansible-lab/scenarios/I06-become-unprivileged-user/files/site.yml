@@ -1,0 +1,15 @@
+- name: App node
+  hosts: app
+  become: true
+  tasks:
+    - name: Service account
+      ansible.builtin.user:
+        name: acme
+        shell: /usr/sbin/nologin
+
+    - name: App config (owned and written by the service account)
+      ansible.builtin.template:
+        src: templates/app.ini.j2
+        dest: /home/acme/app.ini
+        mode: "0600"
+      become_user: acme

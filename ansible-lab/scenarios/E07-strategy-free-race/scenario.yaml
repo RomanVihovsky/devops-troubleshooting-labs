@@ -1,0 +1,8 @@
+id: E07
+title: "Deploy fails since strategy: free - has no attribute 'shop_node_id'"
+kind: incident
+level: 2
+domain: execution
+nodes: [web1, web2, web3]
+wave: 2
+est: 20m

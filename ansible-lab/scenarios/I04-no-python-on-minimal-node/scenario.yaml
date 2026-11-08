@@ -1,0 +1,8 @@
+id: I04
+title: New node from the minimal image - no Python
+kind: incident
+level: 2
+domain: inventory
+nodes: [web1, app1]
+wave: 1
+est: 15m

@@ -1,0 +1,23 @@
+- name: Install nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Site content
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+    mode: "0644"
+
+- name: Site config
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: /etc/nginx/conf.d/site.conf
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Run nginx
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

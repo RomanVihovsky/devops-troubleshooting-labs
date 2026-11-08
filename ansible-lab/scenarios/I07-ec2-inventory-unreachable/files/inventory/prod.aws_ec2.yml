@@ -1,0 +1,13 @@
+# EC2 inventory for the shop. Credentials and the API endpoint come from the CI runner's environment.
+plugin: amazon.aws.aws_ec2
+regions:
+  - eu-west-1
+filters:
+  tag:Env: prod
+  instance-state-name: running
+use_deprecated_tags: false
+keyed_groups:
+  # groups "web" / "db" from the Role tag
+  - key: ec2_tags.Role
+    prefix: ""
+    separator: ""

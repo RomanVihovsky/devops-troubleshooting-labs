@@ -1,0 +1,60 @@
+# usage: ansible-playbook deploy.yml -e shop_release=<version>
+# Canary first (web2, alone), then batches of two. A batch that fails stops the rollout.
+- name: Deploy the shop
+  hosts: shop
+  become: true
+  serial: [1, 2]
+  max_fail_percentage: 50      # stop when half of a batch fails
+  order: sorted                # OPS-2950: deterministic order in the deploy logs
+  tasks:
+    - name: Release directory
+      ansible.builtin.file:
+        path: "/opt/shop/{{ shop_release }}"
+        state: directory
+        mode: "0755"
+
+    - name: Release files
+      ansible.builtin.copy:
+        src: "releases/{{ shop_release }}/shop_server.py"
+        dest: "/opt/shop/{{ shop_release }}/shop_server.py"
+        mode: "0755"
+
+    - name: Service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/shop.service
+        content: |
+          [Unit]
+          Description=ACME shop
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/shop/current/shop_server.py
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
+      notify: Restart shop
+
+    - name: Switch to the release
+      ansible.builtin.file:
+        src: "/opt/shop/{{ shop_release }}"
+        dest: /opt/shop/current
+        state: link
+      notify: Restart shop
+
+    - name: Restart now if needed
+      ansible.builtin.meta: flush_handlers
+
+    - name: Health check
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8090/
+        return_content: true
+      register: shop_health
+      until: shop_health.status == 200 and shop_release in shop_health.content
+      retries: 4
+      delay: 1
+
+  handlers:
+    - name: Restart shop
+      ansible.builtin.systemd_service:
+        name: shop
+        state: restarted
+        enabled: true
+        daemon_reload: true

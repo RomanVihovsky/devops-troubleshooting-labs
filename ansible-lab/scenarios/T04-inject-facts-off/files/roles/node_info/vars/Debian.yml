@@ -1,0 +1,2 @@
+node_info_packages: [jq, acl]
+node_info_admin_group: sudo

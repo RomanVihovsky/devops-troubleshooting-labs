@@ -1,0 +1,32 @@
+- name: Web tier
+  hosts: web-servers
+  become: true
+  vars:
+    web_port: 8080
+    web_tier: unknown
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Site
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/site.conf
+        content: |
+          server {
+              listen {{ web_port }} default_server;
+              add_header X-Tier {{ web_tier }};
+              location / { return 200 "{{ inventory_hostname }}\n"; }
+          }
+        mode: "0644"
+      notify: Reload nginx
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

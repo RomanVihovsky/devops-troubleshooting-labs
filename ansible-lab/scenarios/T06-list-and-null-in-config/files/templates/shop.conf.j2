@@ -1,0 +1,6 @@
+# managed by Ansible
+server {
+    listen 80;
+    server_name {{ shop_server_names | replace(',', ' ') }};
+    root /var/www/shop;
+}

@@ -1,0 +1,5 @@
+sshd_settings:
+  PermitRootLogin: "no"
+  MaxAuthTries: "4"
+  ClientAliveInterval: "600"
+  X11Forwarding: "no"

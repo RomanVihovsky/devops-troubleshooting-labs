@@ -1,0 +1,16 @@
+---
+# EDA activation for the web tier. `./lab eda restart` re-reads this file; `./lab eda logs` shows what happens.
+- name: Heal the web tier
+  hosts: web
+  sources:
+    - ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+  rules:
+    # TODO: rule "Heal nginx" - nginx "down" alerts -> run_playbook remediate/nginx.yml
+
+    - name: Show every alert (debugging)
+      condition: event.payload is defined
+      action:
+        print_event:
+          pretty: true

@@ -1,0 +1,5 @@
+- name: Workers
+  hosts: app
+  become: true
+  roles:
+    - workers

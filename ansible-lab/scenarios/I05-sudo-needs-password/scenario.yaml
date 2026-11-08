@@ -1,0 +1,8 @@
+id: I05
+title: Missing sudo password after the hardening
+kind: incident
+level: 2
+domain: inventory
+nodes: [web1, web2]
+wave: 1
+est: 15m

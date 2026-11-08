@@ -1,0 +1,8 @@
+id: T02
+title: Prod hardening silently skipped under the 2.23 preview
+kind: incident
+level: 1
+domain: templating
+nodes: [web1, web3]
+wave: 1
+est: 15m

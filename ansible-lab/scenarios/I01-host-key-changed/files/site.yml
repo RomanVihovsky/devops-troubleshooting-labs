@@ -1,0 +1,5 @@
+- name: Web tier
+  hosts: web
+  become: true
+  roles:
+    - web

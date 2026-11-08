@@ -1,0 +1,21 @@
+- name: sshd hardening
+  hosts: all
+  become: true
+  tasks:
+    - name: sshd settings
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#{{ item.key }} "
+        line: "{{ item.key }} {{ item.value }}"
+      loop: "{{ sshd_settings | dict2items }}"
+      notify: Reload sshd
+  handlers:
+    - name: Validate sshd config
+      ansible.builtin.command: sshd -t
+      changed_when: false
+      listen: Reload sshd
+    - name: Reload sshd service
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+      listen: Reload sshd

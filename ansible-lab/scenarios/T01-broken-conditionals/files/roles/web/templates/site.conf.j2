@@ -1,0 +1,6 @@
+# managed by Ansible (role web)
+server {
+    listen {{ app_port }} default_server;
+    root /usr/share/nginx/html;
+    location /health { return 200 "{{ app_name }} ok\n"; }
+}

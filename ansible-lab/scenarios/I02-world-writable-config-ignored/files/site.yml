@@ -1,0 +1,16 @@
+- name: Web nodes
+  hosts: web
+  become: true
+  vars:
+    deploy_id: manual
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: Deploy marker
+      ansible.builtin.copy:
+        dest: /etc/acme/deploy-id
+        content: "{{ deploy_id }}\n"
+        mode: "0644"

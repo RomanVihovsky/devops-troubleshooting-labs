@@ -1,0 +1,8 @@
+id: D01
+title: "Monitoring 2.0: nginx alerts reach EDA - nothing gets fixed"
+kind: incident
+level: 2
+domain: eda
+nodes: [web1, web3]
+wave: 2
+est: 25m

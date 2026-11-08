@@ -1,0 +1,5 @@
+#!/bin/sh
+# Docker mounts cgroup2 read-only in non-privileged containers; this container
+# has its own cgroup namespace, so making it writable only affects its own subtree.
+mount -o remount,rw /sys/fs/cgroup 2>/dev/null || true
+exec /usr/lib/systemd/systemd

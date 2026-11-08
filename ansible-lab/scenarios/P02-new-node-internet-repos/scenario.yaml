@@ -1,0 +1,8 @@
+id: P02
+title: A new Rocky node can't reach its package repos
+kind: incident
+level: 2
+domain: platforms
+nodes: [web2]
+wave: 1
+est: 20m

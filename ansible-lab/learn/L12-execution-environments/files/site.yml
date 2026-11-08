@@ -1,0 +1,21 @@
+- name: Service catalog
+  hosts: web
+  become: true
+  vars:
+    catalog:
+      services:
+        - {name: shop, public: true, port: 8080}
+        - {name: admin, public: false, port: 9090}
+        - {name: api, public: true, port: 8443}
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+
+    - name: Public services
+      ansible.builtin.copy:
+        dest: /etc/acme/services.txt
+        content: "{{ catalog | community.general.json_query('services[?public].name') | join(',') }}\n"
+        mode: "0644"

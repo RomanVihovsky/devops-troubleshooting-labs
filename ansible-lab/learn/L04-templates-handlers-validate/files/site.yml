@@ -1,0 +1,31 @@
+- name: Web nodes
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Site
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/site.conf
+        content: |
+          server {
+              listen 8080 default_server;
+              location /health { return 200 "ok\n"; }
+              location / { return 200 "{{ inventory_hostname }}\n"; }
+          }
+        mode: "0644"
+      notify: Reload nginx
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+# TODO: a play for the group "lb" - haproxy (see the task)

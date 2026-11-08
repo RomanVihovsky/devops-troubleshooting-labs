@@ -1,0 +1,5 @@
+#!/bin/sh
+# shop-migrate <seconds>: migrate the node's local data store; the store's node ID comes out of it
+sleep "${1:-1}"
+mkdir -p /var/lib/shop
+[ -s /var/lib/shop/node_id ] || cat /proc/sys/kernel/random/uuid | cut -c1-8 > /var/lib/shop/node_id

@@ -1,0 +1,7 @@
+id: L13
+title: Upgrade a 2.16-era repo to ansible-core 2.22
+kind: learn
+level: 2
+domain: upgrade
+nodes: [web1, web2]
+est: 30m

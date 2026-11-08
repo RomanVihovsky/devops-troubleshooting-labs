@@ -1,0 +1,39 @@
+- name: Common tools
+  hosts: all
+  become: true
+  tasks:
+    - name: Tools
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      loop: [jq, rsync, unzip, git, tar, acl, socat]
+
+- name: Web tier
+  hosts: web
+  become: true
+  tasks:
+    - name: Web marker
+      ansible.builtin.copy:
+        dest: /etc/acme-role
+        content: "web on {{ ansible_facts['hostname'] }}\n"
+        mode: "0644"
+
+- name: App tier
+  hosts: app
+  become: true
+  tasks:
+    - name: App marker
+      ansible.builtin.copy:
+        dest: /etc/acme-role
+        content: "app on {{ ansible_facts['hostname'] }}\n"
+        mode: "0644"
+
+- name: Monitoring agent config
+  hosts: all
+  become: true
+  tasks:
+    - name: Agent config
+      ansible.builtin.copy:
+        dest: /etc/acme-monitoring.conf
+        content: "host={{ ansible_facts['hostname'] }}\nos={{ ansible_facts['os_family'] }}\n"
+        mode: "0644"

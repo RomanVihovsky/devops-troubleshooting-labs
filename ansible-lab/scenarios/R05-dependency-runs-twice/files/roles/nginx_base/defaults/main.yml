@@ -1,0 +1,2 @@
+nginx_base_client_max_body_size: 1m
+nginx_base_keepalive_timeout: 30

@@ -1,0 +1,14 @@
+- name: App tier
+  hosts: app
+  become: true
+  tasks:
+    - name: Base packages
+      ansible.builtin.package:
+        name: [rsync, unzip]
+        state: present
+      tags: [base]
+
+    - name: Deploy the app
+      ansible.builtin.include_role:
+        name: app
+      tags: [deploy]

@@ -1,0 +1,8 @@
+id: E03
+title: "The --check dry run always predicts a restart"
+kind: incident
+level: 2
+domain: execution
+nodes: [app1]
+wave: 1
+est: 15m

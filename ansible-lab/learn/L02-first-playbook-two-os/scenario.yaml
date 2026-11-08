@@ -1,0 +1,7 @@
+id: L02
+title: First playbook on two OS families
+kind: learn
+level: 1
+domain: core
+nodes: [web1, web2]
+est: 20m

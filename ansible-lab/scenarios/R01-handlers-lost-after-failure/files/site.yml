@@ -1,0 +1,24 @@
+- name: Shop
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Shop vhost
+      ansible.builtin.template:
+        src: templates/shop.conf.j2
+        dest: /etc/nginx/conf.d/shop.conf
+        mode: "0644"
+      notify: Reload nginx
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

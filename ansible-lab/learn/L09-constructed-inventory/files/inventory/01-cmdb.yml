@@ -1,0 +1,7 @@
+# exported from the CMDB - do not edit by hand
+all:
+  hosts:
+    web1: {env: prod, role: web, tier: silver}
+    web2: {env: staging, role: web, tier: bronze}
+    app1: {env: prod, role: app, tier: silver}
+    db1: {env: prod, role: db, tier: gold}

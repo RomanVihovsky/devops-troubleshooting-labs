@@ -1,0 +1,7 @@
+id: L11
+title: ansible-lint and molecule
+kind: learn
+level: 2
+domain: testing
+nodes: [test1]
+est: 30m

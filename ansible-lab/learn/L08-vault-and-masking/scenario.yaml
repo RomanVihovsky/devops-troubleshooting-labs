@@ -1,0 +1,7 @@
+id: L08
+title: Vault and secret masking (2.22)
+kind: learn
+level: 2
+domain: secrets
+nodes: [web1, web2]
+est: 30m

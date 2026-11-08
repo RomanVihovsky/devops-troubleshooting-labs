@@ -1,0 +1,2 @@
+haproxy_maxconn: 2000
+haproxy_balance: roundrobin

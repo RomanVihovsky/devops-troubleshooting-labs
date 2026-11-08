@@ -1,0 +1,13 @@
+- name: Log rotation
+  hosts: web
+  become: true
+  tasks:
+    - name: Install logrotate
+      ansible.builtin.package:
+        name: logrotate
+        state: present
+    - name: App log directory
+      ansible.builtin.file:
+        path: /var/log/acme
+        state: directory
+        mode: "0755"

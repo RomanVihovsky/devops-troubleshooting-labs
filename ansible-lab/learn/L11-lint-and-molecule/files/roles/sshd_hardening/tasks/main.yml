@@ -1,0 +1,12 @@
+- name: install openssh server
+  package: name=openssh-server state=present
+
+- name: hardening snippet
+  template:
+    src: hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/50-acme.conf
+    validate: /usr/sbin/sshd -t -f %s
+  notify: reload sshd
+
+- name: sshd running
+  service: name={{ sshd_service }} state=started enabled=yes

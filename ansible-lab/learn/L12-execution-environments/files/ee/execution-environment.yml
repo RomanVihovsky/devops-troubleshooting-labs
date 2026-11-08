@@ -1,0 +1,16 @@
+version: 3
+
+# TODO: images.base_image -> ansiblelab/ee-base:1
+# TODO: dependencies -> python interpreter path, ansible_core + ansible_runner (pip), python: jmespath
+
+options:
+  package_manager_path: /bin/true          # python:slim base - no OS packages needed
+
+# --- air-gap plumbing (given): pip installs only from the company wheelhouse copied to ee/wheels ---
+additional_build_files:
+  - src: wheels
+    dest: wheels
+additional_build_steps:
+  prepend_base:
+    - COPY _build/wheels /wheels
+    - ENV PIP_NO_INDEX=1 PIP_FIND_LINKS=/wheels

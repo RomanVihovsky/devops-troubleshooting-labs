@@ -1,0 +1,11 @@
+- name: Report directory
+  ansible.builtin.file:
+    path: /etc/acme
+    state: directory
+    mode: "0755"
+
+- name: Node report
+  ansible.builtin.template:
+    src: node-report.txt.j2
+    dest: /etc/acme/node-report.txt
+    mode: "0644"

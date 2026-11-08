@@ -1,0 +1,7 @@
+- name: ACME app config
+  hosts: web
+  become: true
+  roles:
+    - role: appconfig
+      appconfig_port: 8443
+      appconfig_features: [search, cart]

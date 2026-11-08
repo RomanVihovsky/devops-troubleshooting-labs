@@ -1,0 +1,7 @@
+id: L14
+title: Speed and observability
+kind: learn
+level: 2
+domain: performance
+nodes: [web1, web2]
+est: 25m

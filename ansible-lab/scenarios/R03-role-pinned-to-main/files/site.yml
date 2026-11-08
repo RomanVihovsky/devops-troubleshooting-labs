@@ -1,0 +1,5 @@
+- name: Login banner
+  hosts: all
+  become: true
+  roles:
+    - acme.banner

@@ -1,0 +1,18 @@
+- name: Install Apache
+  ansible.builtin.apt:
+    name: apache2
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Home page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+    mode: "0644"
+
+- name: Run Apache
+  ansible.builtin.service:
+    name: apache2
+    state: started
+    enabled: true

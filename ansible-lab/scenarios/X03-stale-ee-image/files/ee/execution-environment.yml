@@ -1,0 +1,25 @@
+version: 3
+
+images:
+  base_image:
+    name: ansiblelab/ee-base:1
+
+dependencies:
+  python_interpreter:
+    python_path: /usr/local/bin/python3
+  ansible_core:
+    package_pip: ansible-core==2.22.0
+  ansible_runner:
+    package_pip: ansible-runner
+
+options:
+  package_manager_path: /bin/true          # python:slim base - no OS packages needed
+
+# air-gap plumbing: pip installs only from the company wheelhouse copied to ee/wheels
+additional_build_files:
+  - src: wheels
+    dest: wheels
+additional_build_steps:
+  prepend_base:
+    - COPY _build/wheels /wheels
+    - ENV PIP_NO_INDEX=1 PIP_FIND_LINKS=/wheels

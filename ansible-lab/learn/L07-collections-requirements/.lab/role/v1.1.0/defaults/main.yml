@@ -1,0 +1,1 @@
+logrotate_keep: 3   # v1.1.0: storage savings (not approved for prod yet)

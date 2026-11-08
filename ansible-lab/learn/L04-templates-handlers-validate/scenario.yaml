@@ -1,0 +1,7 @@
+id: L04
+title: Templates, handlers and validate
+kind: learn
+level: 2
+domain: templating
+nodes: [lb1, web1, web2]
+est: 25m

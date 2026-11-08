@@ -1,0 +1,53 @@
+# usage: ansible-playbook deploy.yml   - all web nodes in parallel (60 in prod), then (re)register them on lb1
+- name: Deploy the shop
+  hosts: web
+  become: true
+  vars:
+    shop_release: "3.4.1"
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Shop site on 8080
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/shop.conf
+        content: |
+          server {
+              listen 8080 default_server;
+              root /usr/share/nginx/html;
+          }
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Shop page
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/index.html
+        content: "shop {{ shop_release }} on {{ inventory_hostname }}\n"
+        mode: "0644"
+
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Drop nodes that left the inventory from the load balancer
+      ansible.builtin.command: "/usr/local/sbin/lb-register prune {{ groups['web'] | join(' ') }}"
+      register: lb_prune
+      changed_when: lb_prune.stdout == "pruned"
+      delegate_to: lb1
+      run_once: true
+
+    - name: Register in the load balancer
+      ansible.builtin.command: "/usr/local/sbin/lb-register add {{ inventory_hostname }} {{ inventory_hostname }}:8080"
+      register: lb_add
+      changed_when: lb_add.stdout is search('^added')
+      delegate_to: lb1
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

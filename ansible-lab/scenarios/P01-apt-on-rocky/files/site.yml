@@ -1,0 +1,5 @@
+- name: Website
+  hosts: web
+  become: true
+  roles:
+    - website

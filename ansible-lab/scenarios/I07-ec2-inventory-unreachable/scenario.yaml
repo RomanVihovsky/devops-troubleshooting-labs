@@ -1,0 +1,8 @@
+id: I07
+title: Every host UNREACHABLE since the switch to the EC2 inventory
+kind: incident
+level: 1
+domain: inventory
+nodes: [web1, web2, db1]
+wave: 2
+est: 15m

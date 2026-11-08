@@ -1,0 +1,13 @@
+- name: Web tuning
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Tuning
+      ansible.builtin.template:
+        src: templates/tuning.conf.j2
+        dest: /etc/nginx/conf.d/00-tuning.conf
+        mode: "0644"

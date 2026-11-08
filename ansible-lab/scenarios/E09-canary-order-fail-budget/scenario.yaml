@@ -1,0 +1,8 @@
+id: E09
+title: Release 5.0.0 broke two nodes - the canary should have caught it
+kind: incident
+level: 2
+domain: execution
+nodes: [web1, web2, app1, app2]
+wave: 2
+est: 25m

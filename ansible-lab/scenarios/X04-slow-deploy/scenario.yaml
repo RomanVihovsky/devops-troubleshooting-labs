@@ -1,0 +1,8 @@
+id: X04
+title: The deploy got slower with every node we added
+kind: incident
+level: 2
+domain: pipeline
+nodes: [web1, web3, app1, app2]
+wave: 1
+est: 25m

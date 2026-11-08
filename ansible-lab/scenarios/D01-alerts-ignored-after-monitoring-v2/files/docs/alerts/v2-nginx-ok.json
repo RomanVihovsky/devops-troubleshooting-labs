@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "alert": {
+    "check": "nginx",
+    "state": "ok",
+    "target": {"fqdn": "web3.acme.internal", "env": "prod"},
+    "summary": "nginx on web3.acme.internal is running"
+  },
+  "sent_at": "2026-11-06T03:20:02Z"
+}

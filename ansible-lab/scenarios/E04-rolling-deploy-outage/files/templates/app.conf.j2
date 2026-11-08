@@ -1,0 +1,7 @@
+# managed by Ansible - release {{ app_release }}
+server {
+    listen 8080 default_server;
+    root /usr/share/nginx/html;
+    location /health { return 200 "ok\n"; }
+    {{ app_nginx_extra }}
+}

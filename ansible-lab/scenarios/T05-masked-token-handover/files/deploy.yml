@@ -1,0 +1,35 @@
+- name: API gateway
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: API endpoint
+      ansible.builtin.template:
+        src: templates/api.conf.j2
+        dest: /etc/nginx/conf.d/api.conf
+        owner: root
+        group: root
+        mode: "0640"
+      notify: Reload nginx
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+- name: Smoke test handover
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Token for the smoke test
+      ansible.builtin.debug:
+        msg: "SMOKE_TOKEN={{ api_token }}"

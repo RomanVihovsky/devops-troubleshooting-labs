@@ -1,0 +1,4 @@
+dependencies:
+  - role: nginx_base
+    vars:
+      nginx_base_client_max_body_size: 50m

@@ -1,0 +1,23 @@
+# managed by Ansible (role haproxy)
+global
+    log /dev/log local0
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    mode http
+    timeout connect 2s
+    timeout client 10s
+    timeout server 10s
+
+frontend site
+    bind *:80
+    default_backend app
+
+backend app
+    option httpchk GET /health
+{% for h in groups['app'] %}
+    server {{ h }} {{ h }}:8080 check inter 1s fall 2 rise 2
+{% endfor %}

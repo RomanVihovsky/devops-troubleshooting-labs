@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stand-in for pg_dump of the orders database: slow, writes progressively.
+set -eu
+out=$1; label=${2:-manual}
+echo "-- ACME dump start $label" > "$out"
+for i in $(seq 1 16); do echo "INSERT INTO orders VALUES ($i, 'order-$i');" >> "$out"; sleep 0.5; done
+echo "-- ACME dump complete $label" >> "$out"

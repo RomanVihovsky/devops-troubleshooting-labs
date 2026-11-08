@@ -1,0 +1,39 @@
+- name: Shop vhost
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Document root
+      ansible.builtin.file:
+        path: /var/www/shop
+        state: directory
+        mode: "0755"
+    - name: Shop page
+      ansible.builtin.copy:
+        dest: /var/www/shop/index.html
+        content: "ACME shop\n"
+        mode: "0644"
+    - name: Shop vhost
+      ansible.builtin.template:
+        src: templates/shop.conf.j2
+        dest: /etc/nginx/conf.d/shop.conf
+        mode: "0644"
+      notify: Reload nginx
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+  handlers:
+    - name: Validate nginx config
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      listen: Reload nginx
+    - name: Reload nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+      listen: Reload nginx

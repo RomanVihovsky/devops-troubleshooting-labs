@@ -1,0 +1,4 @@
+#!/bin/sh
+# shop-warmup <seconds>: preload the catalog cache (stand-in: takes as long as the node's shard needs)
+sleep "${1:-1}"
+mkdir -p /var/lib/shop && date +%s > /var/lib/shop/warm

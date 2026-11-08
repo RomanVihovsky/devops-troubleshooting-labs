@@ -1,0 +1,18 @@
+# managed by Ansible (lb role) - the backend servers are added by lb-register
+global
+    log /dev/log local0
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    daemon
+
+defaults
+    mode http
+    timeout connect 2s
+    timeout client 10s
+    timeout server 10s
+
+frontend shop
+    bind *:80
+    default_backend web
+
+backend web
+    balance roundrobin

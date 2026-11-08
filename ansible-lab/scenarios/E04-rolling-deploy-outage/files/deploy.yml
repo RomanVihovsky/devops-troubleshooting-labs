@@ -1,0 +1,25 @@
+# usage: ansible-playbook deploy.yml -e app_release=<version>
+- name: Deploy a release
+  hosts: web
+  become: true
+  vars_files:
+    - "releases/{{ app_release }}.yml"
+  tasks:
+    - name: Release marker
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/version.txt
+        content: "{{ app_release }}\n"
+        mode: "0644"
+
+    - name: App config
+      ansible.builtin.template:
+        src: templates/app.conf.j2
+        dest: /etc/nginx/conf.d/app.conf
+        mode: "0644"
+      notify: Restart nginx
+
+  handlers:
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted

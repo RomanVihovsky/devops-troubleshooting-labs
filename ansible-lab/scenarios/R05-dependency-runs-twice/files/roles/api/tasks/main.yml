@@ -1,0 +1,11 @@
+- name: api vhost
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/api.conf
+    content: |
+      server {
+          listen 80;
+          server_name api.acme.test;
+          location / { return 200 "api\n"; }
+      }
+    mode: "0644"
+  notify: Reload nginx

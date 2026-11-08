@@ -1,0 +1,5 @@
+- name: Message of the day
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    mode: "0644"

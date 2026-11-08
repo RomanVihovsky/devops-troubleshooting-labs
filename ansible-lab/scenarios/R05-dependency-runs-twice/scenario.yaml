@@ -1,0 +1,8 @@
+id: R05
+title: A role dependency runs twice - nginx changes on every run
+kind: incident
+level: 2
+domain: roles
+nodes: [web1]
+wave: 1
+est: 20m

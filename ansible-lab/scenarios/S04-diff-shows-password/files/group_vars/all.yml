@@ -1,0 +1,1 @@
+db_secrets: "{{ lookup('ansible.builtin.file', '.secrets/db.json') | from_json }}"

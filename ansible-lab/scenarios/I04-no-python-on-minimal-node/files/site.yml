@@ -1,0 +1,14 @@
+- name: App nodes
+  hosts: app
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: Node marker
+      ansible.builtin.copy:
+        dest: /etc/acme/node.txt
+        content: "{{ inventory_hostname }} {{ ansible_facts['distribution'] }} {{ ansible_facts['python_version'] }}\n"
+        mode: "0644"

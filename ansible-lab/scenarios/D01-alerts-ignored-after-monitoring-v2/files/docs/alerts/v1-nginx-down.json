@@ -1,0 +1,1 @@
+{"check": "nginx", "host": "web1", "status": "down", "summary": "nginx on web1 is not running"}

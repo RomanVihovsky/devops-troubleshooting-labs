@@ -1,0 +1,4 @@
+collections/ansible_collections/
+roles/*
+!roles/.keep
+.ansible/

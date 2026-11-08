@@ -1,0 +1,4 @@
+# managed by Ansible - shop cluster members (every node must know every other node's ID)
+{% for host in ansible_play_hosts_all | sort %}
+member {{ host }} {{ hostvars[host].shop_node_id }}
+{% endfor %}

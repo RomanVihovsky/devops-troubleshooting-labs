@@ -1,0 +1,36 @@
+- name: Load balancer
+  hosts: lb
+  become: true
+  tasks:
+    - name: Install haproxy
+      ansible.builtin.package:
+        name:
+          - haproxy
+          - socat
+        state: present
+
+    - name: Config head (servers come from lb-register)
+      ansible.builtin.template:
+        src: templates/haproxy.cfg.head.j2
+        dest: /etc/haproxy/haproxy.cfg.head
+        mode: "0644"
+
+    - name: Backend registry tool (vendored from netops/lb-tools)
+      ansible.builtin.copy:
+        src: files/lb-register
+        dest: /usr/local/sbin/lb-register
+        mode: "0755"
+
+    - name: Initial config
+      ansible.builtin.command: /usr/local/sbin/lb-register reset
+      args:
+        creates: /var/lib/lb/backends
+
+    - name: Run haproxy
+      ansible.builtin.service:
+        name: haproxy
+        state: started
+        enabled: true
+
+- name: Release
+  ansible.builtin.import_playbook: deploy.yml

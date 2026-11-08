@@ -1,0 +1,8 @@
+id: D02
+title: "Flapping check: EDA restarted nginx on web1 23 times in 10 minutes"
+kind: incident
+level: 2
+domain: eda
+nodes: [web1, web3]
+wave: 2
+est: 20m

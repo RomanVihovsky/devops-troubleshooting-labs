@@ -1,0 +1,8 @@
+id: X02
+title: Molecule idempotence fails on a template
+kind: incident
+level: 2
+domain: pipeline
+nodes: [test1]
+wave: 1
+est: 20m

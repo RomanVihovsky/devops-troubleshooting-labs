@@ -1,0 +1,28 @@
+- hosts: web
+  become: yes
+  vars:
+    port: 8080
+    start_nginx: true
+  tasks:
+    - name: install nginx
+      apt: name=nginx state=present
+
+    - name: config dir
+      file:
+        path: /etc/acme
+        state: directory
+
+    - name: deploy app config
+      copy:
+        dest: /etc/acme/app.conf
+        content: "port={{port}}\n"
+
+    - name: Reload nginx after config changes
+      command: systemctl reload nginx
+
+    - name: Ensure nginx running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      when: start_nginx == True

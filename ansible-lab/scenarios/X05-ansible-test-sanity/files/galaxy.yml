@@ -1,0 +1,16 @@
+namespace: acme
+name: ops
+version: 1.1.0
+readme: README.md
+authors:
+  - ACME Platform Team <platform@acme.example>
+description: Modules for running the ACME shop
+license:
+  - GPL-3.0-or-later
+tags: [acme, shop]
+repository: https://git.acme.example/platform/acme-ops
+build_ignore:
+  - ci
+  - playbooks
+  - inventory
+  - ansible.cfg

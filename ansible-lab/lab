@@ -1,0 +1,605 @@
+#!/usr/bin/env bash
+# ansible-lab - modern Ansible (core 2.22) on Debian 12 + Rocky 9: a learn track and break/fix incidents.
+# Run `./lab help` for usage.
+set -euo pipefail
+LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$LAB_DIR/lib/common.sh"
+# shellcheck source=lib/ans.sh
+source "$LAB_DIR/lib/ans.sh"
+IV="$STATE_DIR/interview"     # ./lab interview state
+
+usage() {
+  cat <<EOF
+${C_BOLD}ansible-lab${C_0} - ansible-core ${ANSIBLE_CORE_VERSION} · Debian 12 + Rocky 9 nodes · offline, nothing privileged
+
+  ./lab build                 once: controller + node images, package mirror, collections, wheels (~1.5 GB)
+  ./lab doctor                check images, mirror, controller versions, disk
+  ./lab list [--learn|--incidents|--domain T]   labs (✔ = solved before, ▶ = current)
+  ./lab start <id|random>     fresh nodes + workspace, broken on purpose, prints the ticket
+  ./lab ticket                show the current ticket / task again
+  ./lab sh                    shell in the controller, in /work (= workspace/): ansible, lint, molecule, builder
+  ./lab run <cmd...>          one command in the controller, e.g. ./lab run ansible-playbook site.yml
+  ./lab ssh <node>            ssh ansible@<node> from the controller (real SSH, lab key)
+  ./lab node <node>           root shell on a node (the "console")
+  ./lab ee build <dir> [tag]  build the EE context made by ansible-builder in workspace/<dir> (host docker)
+  ./lab ee run <tag> <args>   run ansible-playbook <args> inside that EE on the lab network
+  ./lab eda logs|restart|post <json|file>   the EDA activation (rulebook) of the current lab
+  ./lab interview [n] [min]   n random incidents (default 3) against the clock, scored - see ./lab interview help
+  ./lab verify                PASS / FAIL - judged on a fresh "CI checkout" of workspace/
+  ./lab hint [n]              next progressive hint (or hint n)
+  ./lab diff                  what you changed since "as found"
+  ./lab solution [-y]         root cause + fix (spoiler)
+  ./lab solve                 apply the reference fix (spoiler)
+  ./lab reset                 start the current lab again from scratch
+  ./lab stop                  remove nodes, empty workspace
+  ./lab status                what's running
+  ./lab up | down             start / remove controller, mirror and network
+  ./lab selftest <id..|all|learn|incidents|wave1|wave2>   start -> verify(FAIL) -> solve -> verify(PASS)
+EOF
+}
+
+# ---------------------------------------------------------------- labs ------
+all_labs() {
+  local d
+  for d in "$LEARN_DIR"/*/ "$SCEN_DIR"/*/; do [ -f "$d/scenario.yaml" ] && echo "${d%/}"; done
+}
+yget() { sed -n "s/^$1: *//p" "$2/scenario.yaml" | head -1; }
+ylist() { yget "$1" "$2" | tr -d '[],' ; }
+lab_dir() {
+  local id=$1 d u
+  for d in "$LEARN_DIR/$id" "$SCEN_DIR/$id"; do [ -d "$d" ] && { echo "$d"; return; }; done
+  u=${id^^}
+  for d in "$LEARN_DIR/$u"-* "$SCEN_DIR/$u"-*; do [ -d "$d" ] && { echo "$d"; return; }; done
+  die "no such lab: $1 (see ./lab list)"
+}
+current() {
+  [ -f "$STATE_DIR/current" ] || die "no lab running - ./lab start <id>"
+  echo "$LAB_DIR/$(cat "$STATE_DIR/current")"
+}
+rel() { echo "${1#"$LAB_DIR"/}"; }
+
+cmd_list() {
+  local filter=${1:-} dom=${2:-} d name id title mark cur lvl kind last=""
+  cur=$(cat "$STATE_DIR/current" 2>/dev/null || true)
+  while read -r d; do
+    name=$(basename "$d"); id=$(yget id "$d"); kind=$(yget kind "$d"); lvl=$(yget level "$d")
+    case $filter in
+      --learn) [ "$kind" = learn ] || continue ;;
+      --incidents) [ "$kind" = incident ] || continue ;;
+      --domain) [ "${id:0:1}" = "${dom^^}" ] || continue ;;
+    esac
+    if [ "$kind" != "$last" ]; then
+      echo; if [ "$kind" = learn ]; then echo "${C_BOLD}Learn track${C_0}"; else echo "${C_BOLD}Incidents${C_0}"; fi
+      last=$kind
+    fi
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
+    [ "$cur" = "$(rel "$d")" ] && [ ! -f "$STATE_DIR/random" ] && mark="${C_Y}▶${C_0}"
+    printf ' %s %-5s %-4s %s\n' "$mark" "$id" "$(printf '%*s' "${lvl:-1}" '' | sed 's/ /•/g')" "$title"
+  done < <(all_labs)
+  echo
+}
+
+show_ticket() {
+  echo
+  md "$1/ticket.md"
+  cat <<EOF
+
+${C_BOLD}Work${C_0}: ./lab sh  (or edit workspace/ in your IDE)   ${C_BOLD}Nodes${C_0}: $(ylist nodes "$1")   ${C_BOLD}Check${C_0}: ./lab verify   ${C_BOLD}Stuck?${C_0} ./lab hint
+EOF
+}
+
+# ------------------------------------------------------------ lifecycle -----
+built() {
+  local i
+  for i in "$CTL1_IMAGE" "$CTL_IMAGE" "$NODE_DEBIAN_IMAGE" "$NODE_ROCKY_IMAGE" "$EE_BASE_IMAGE" "$MOTO_IMAGE"; do
+    docker image inspect "$i" >/dev/null 2>&1 || return 1
+  done
+  [ -f "$CACHE_DIR/pypi/sanity/get_pip_${SANITY_PIP_VERSION//./_}.py" ] || return 1
+  [ -f "$CACHE_DIR/mirror/debian/Packages.gz" ] && [ -d "$CACHE_DIR/mirror/rocky9/repodata" ] &&
+    ls "$CACHE_DIR"/collections/*.tar.gz >/dev/null 2>&1
+}
+ensure_built() { built || cmd_build; }
+
+cmd_stop() {
+  nodes_down
+  empty_dir "$WS"; empty_dir "$CI"; empty_dir "$GIT_DIR_LAB"
+  : > "$SSH_DIR/known_hosts" 2>/dev/null || true
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR/random" "$STATE_DIR"/scenario.* \
+        "$SETUP_LOG" "$VERIFY_LOG"
+}
+
+cmd_start() {
+  local d name nodes
+  [ $# -ge 1 ] || die "usage: ./lab start <id|random>"
+  ensure_built
+  if [ "$1" = random ]; then
+    d=$(all_labs | while read -r x; do [ "$(yget kind "$x")" = incident ] && echo "$x"; done | shuf -n1)
+  else
+    d=$(lab_dir "$1")
+  fi
+  name=$(basename "$d")
+  export LAB_ID; LAB_ID=$(yget id "$d")
+  if [ -d "$IV" ] && [ -z "${IV_INTERNAL:-}" ]; then warn "interview abandoned (./lab start)"; rm -rf "$IV"; fi
+  cmd_stop
+  local hide=""; { [ "$1" = random ] || [ -n "${IV_INTERNAL:-}" ]; } && hide=1
+  if [ -n "$hide" ]; then info "Starting a random incident..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
+  infra_up
+  ws_reset
+  [ -d "$d/files" ] && cp -a "$d/files/." "$WS/"
+  [ -f "$WS/.gitignore" ] || printf '.ansible/\n*.retry\n__pycache__/\ncontext/\n' > "$WS/.gitignore"
+  rel "$d" > "$STATE_DIR/current"
+  [ -n "$hide" ] && touch "$STATE_DIR/random"
+  : > "$SETUP_LOG"
+  nodes=$(ylist nodes "$d")
+  # shellcheck disable=SC2086
+  if [ -n "$nodes" ]; then info "Fresh nodes: $nodes"; nodes_up $nodes; fi
+  info "Setting the scene (the team's past runs)..."
+  if [ -f "$d/.lab/setup.sh" ]; then
+    run_lab_script "$d/.lab/setup.sh" "$WS" || die "setup failed (log: .state/setup.log)"
+  fi
+  if ! git -C "$WS" rev-parse -q --verify HEAD >/dev/null || [ -n "$(git -C "$WS" status --porcelain)" ]; then
+    ws_commit "as found"
+  fi
+  remember asfound "$(git -C "$WS" rev-parse HEAD)"
+  remember started "$(date +%s)"
+  show_ticket "$d"
+}
+
+cmd_ticket() { show_ticket "$(current)"; }
+
+cmd_hint() {
+  local d n total
+  d=$(current)
+  total=$(grep -c '^## ' "$d/hints.md")
+  if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
+  [ "$n" -gt "$total" ] && n=$total
+  echo "$n" > "$STATE_DIR/hint"
+  iv_hint "$n"
+  echo "${C_BOLD}Hint $n/$total${C_0}"
+  awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
+  [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
+  return 0
+}
+
+cmd_verify() {
+  local d rc=0
+  d=$(current)
+  export LAB_ID; LAB_ID=$(yget id "$d")
+  info "Verifying $(basename "$d") on a fresh CI checkout of workspace/"
+  ci_checkout
+  # no pipefail in verify: `docker exec ... | grep -q` races (EPIPE when grep exits early)
+  run_lab_script "$d/.lab/verify.sh" "$CI" "-u" || rc=$?
+  if [ $rc -eq 0 ] && [ -z "${LAB_SELFTEST:-}" ]; then
+    grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+    iv_solved
+  elif [ $rc -ne 0 ]; then
+    echo "  (Ansible output of the CI run: .state/verify.log)"
+  fi
+  return $rc
+}
+
+cmd_solution() {
+  local d a; d=$(current)
+  if [ -t 0 ] && [ "${1:-}" != -y ]; then
+    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    [[ $a =~ ^[yY] ]] || exit 0
+  fi
+  iv_reveal
+  md "$d/.lab/solution.md"
+}
+
+cmd_solve() {
+  local d; d=$(current)
+  export LAB_ID; LAB_ID=$(yget id "$d")
+  info "Applying reference fix for $(basename "$d")"
+  iv_reveal
+  run_lab_script "$d/.lab/solve.sh" "$WS"
+}
+
+cmd_reset() { local d; d=$(current); cmd_start "$(basename "$d")"; }
+
+cmd_diff() {
+  current >/dev/null
+  git -C "$WS" -c color.ui=always diff "$(recall asfound)" -- . || true
+  git -C "$WS" status --short --untracked-files=all | grep '^??' || true
+}
+
+tty_flags() { if [ -t 0 ] && [ -t 1 ]; then echo -it; else echo -i; fi; }
+ctl_exec() {   # interactive exec in the controller (shell, run)
+  local d id="" args=()
+  [ -f "$STATE_DIR/current" ] && { d=$(current); id=$(yget id "$d"); }
+  mapfile -t args < <(ctl_env_args)
+  # shellcheck disable=SC2046
+  docker exec $(tty_flags) -u ops -w /work -e "LAB_ID=$id" "${args[@]}" "$CTL" "$@"
+}
+cmd_sh()   { running "$CTL" || die "controller not running - ./lab start <id>"; ctl_exec bash -l; }
+cmd_run()  { [ $# -gt 0 ] || die "usage: ./lab run <cmd...>"; ctl_exec bash -lc "$*"; }
+cmd_ssh()  { [ $# -eq 1 ] || die "usage: ./lab ssh <node>"; ctl_exec ssh "ansible@$1"; }
+cmd_node() {
+  [ $# -eq 1 ] || die "usage: ./lab node <node>"
+  running "ans-$1" || die "node $1 is not running in this lab"
+  # shellcheck disable=SC2046
+  docker exec $(tty_flags) "ans-$1" bash -l
+}
+
+# EE helpers: ansible-builder creates the context inside the controller; Docker on the host builds and runs
+# it (what ansible-navigator does with --ee true) - no container engine or socket inside the controller.
+cmd_ee() {
+  local sub=${1:-}; shift || true
+  case $sub in
+    build)
+      local dir=${1:?usage: ./lab ee build <dir> [tag]} tag=${2:-acme/ee:dev}
+      [ -f "$WS/$dir/context/Dockerfile" ] || die "no build context in workspace/$dir/context - run 'ansible-builder create' there first"
+      info "docker build --network none -t $tag workspace/$dir/context"
+      docker build --network none -t "$tag" "$WS/$dir/context"
+      ;;
+    run)
+      local tag=${1:?usage: ./lab ee run <tag> <ansible-playbook args>}; shift
+      info "docker run --network $NET --user $(id -u):0 -v workspace:/runner/project $tag ansible-playbook $*"
+      # shellcheck disable=SC2046
+      docker run --rm $(tty_flags) --network "$NET" --user "$(id -u):0" -e ANSIBLE_FORCE_COLOR=1 \
+        -v "$WS:/runner/project" -v "$SSH_DIR:/runner/.ssh:ro" -w /runner/project \
+        --label "ansiblelab.scenario=ee" "$tag" ansible-playbook "$@"
+      ;;
+    *) die "usage: ./lab ee build <dir> [tag] | ./lab ee run <tag> <ansible-playbook args>" ;;
+  esac
+}
+
+# EDA activation of the current lab (ans-eda): what EDA controller shows as the activation's log / restart button
+cmd_eda() {
+  local sub=${1:-logs}; shift || true
+  running "$EDA" || die "this lab has no EDA activation running"
+  case $sub in
+    logs|log) if [ "${1:-}" = -f ]; then docker logs -f --tail 50 "$EDA"; else docker logs --tail "${1:-60}" "$EDA" 2>&1; fi ;;
+    restart)
+      info "restarting the activation from workspace/ ($(sed -n 's/^RULEBOOK=//p' "$STATE_DIR/eda/activation.env"))"
+      eda_restart /work && ok "activation listening on $EDA_URL" ||
+        { docker logs --tail 25 "$EDA" 2>&1; die "the rulebook did not come up - see ./lab eda logs"; } ;;
+    post)
+      local j=${1:?usage: ./lab eda post <json|file in workspace/>}
+      [ -f "$WS/$j" ] && j=$(cat "$WS/$j"); [ -f "$j" ] && j=$(cat "$j")
+      eda_post "$j" && ok "posted to $EDA_URL" ;;
+    *) die "usage: ./lab eda logs [-f|n] | restart | post <json|file>" ;;
+  esac
+}
+
+cmd_status() {
+  docker ps -a --filter label=ansiblelab.infra --format 'table {{.Names}}\t{{.Status}}' 2>/dev/null
+  docker ps -a --filter label=ansiblelab.scenario --format '{{.Names}}\t{{.Status}}' 2>/dev/null
+  if [ -f "$STATE_DIR/current" ]; then
+    if [ -f "$STATE_DIR/random" ]; then echo "lab: (random incident)"; else echo "lab: $(cat "$STATE_DIR/current")"; fi
+  else
+    echo "lab: none"
+  fi
+}
+
+# ------------------------------------------------------------ interview -----
+# n random incidents one after another, IDs hidden, against a time budget. Points: 10 x level per ticket;
+# each hint -20 %; solution/solve -> 0; solved after the budget ran out -> half.
+iv_active() { [ -f "$IV/queue" ]; }
+iv_get() { cat "$IV/$1" 2>/dev/null; }
+iv_n() { wc -l < "$IV/queue"; }
+mmss() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
+iv_dots() { printf '%*s' "$1" '' | sed 's/ /•/g'; printf '%*s' $((4 - $1)) ''; }   # • is multibyte: pad by hand
+iv_hint() {
+  iv_active || return 0
+  [ "$1" -gt "$(iv_get cur.hints || echo 0)" ] && echo "$1" > "$IV/cur.hints"
+  return 0
+}
+iv_reveal() {
+  iv_active || return 0
+  [ -f "$IV/cur.revealed" ] || warn "interview: ticket $(iv_get idx) now scores 0 (solution looked up)"
+  touch "$IV/cur.revealed"
+}
+iv_solved() {
+  { iv_active && [ ! -f "$IV/cur.solved" ]; } || return 0
+  echo "$(( $(date +%s) - $(iv_get tt0) ))" > "$IV/cur.solved"
+  echo "${C_G}${C_BOLD}Interview: ticket $(iv_get idx)/$(iv_n) solved in $(mmss "$(iv_get cur.solved)")${C_0} - ./lab interview next"
+}
+iv_left() {
+  local used budget
+  used=$(( $(date +%s) - $(iv_get t0) )); budget=$(iv_get budget)
+  if [ "$used" -le "$budget" ]; then echo "$(mmss $((budget - used))) of $(mmss "$budget") left"
+  else echo "${C_R}$(mmss $((used - budget))) over the $(mmss "$budget") budget${C_0}"; fi
+}
+iv_ticket() {   # start the ticket number $IV/idx
+  local name; name=$(sed -n "$(iv_get idx)p" "$IV/queue")
+  rm -f "$IV"/cur.*; date +%s > "$IV/tt0"
+  echo; info "${C_BOLD}Interview ticket $(iv_get idx)/$(iv_n)${C_0} - $(iv_left)"
+  IV_INTERNAL=1 cmd_start "$name"
+}
+iv_close_ticket() {   # record the current ticket's result: name|solved/late/revealed/skipped|seconds|hints
+  local name secs st hints now
+  name=$(sed -n "$(iv_get idx)p" "$IV/queue"); now=$(date +%s)
+  hints=$(iv_get cur.hints || true); hints=${hints:-0}   # no hint file = 0 (set -e!)
+  if [ -f "$IV/cur.revealed" ]; then st=revealed; secs=$((now - $(iv_get tt0)))
+  elif [ -f "$IV/cur.solved" ]; then
+    secs=$(iv_get cur.solved); st=solved
+    [ $(( $(iv_get tt0) + secs - $(iv_get t0) )) -gt "$(iv_get budget)" ] && st=late
+  else st=skipped; secs=$((now - $(iv_get tt0))); fi
+  echo "$name|$st|$secs|$hints" >> "$IV/results"
+}
+iv_scorecard() {
+  local name st secs hints d id lvl max pts total=0 totmax=0 i=0 pct grade used ids=""
+  used=$(( $(date +%s) - $(iv_get t0) ))
+  echo; echo "${C_BOLD}Interview score card${C_0} - $(iv_n) tickets, budget $(mmss "$(iv_get budget)"), used $(mmss "$used")"
+  printf '  %-2s %-4s %-4s %-9s %6s %5s %7s  %s\n' '#' Lab Lvl Result Time Hints Points Ticket
+  while IFS='|' read -r name st secs hints; do
+    i=$((i + 1)); d=$(lab_dir "$name"); id=$(yget id "$d"); lvl=$(yget level "$d"); max=$((10 * lvl))
+    case $st in
+      solved) pts=$(( max * (100 - 20 * hints) / 100 )) ;;
+      late)   pts=$(( max * (100 - 20 * hints) / 200 )) ;;
+      *)      pts=0 ;;
+    esac
+    total=$((total + pts)); totmax=$((totmax + max)); ids="$ids $id"
+    printf '  %-2s %-4s %s %-9s %6s %5s %7s  %s\n' "$i" "$id" "$(iv_dots "$lvl")" "$st" \
+      "$(mmss "$secs")" "$hints" "$pts/$max" "$(sed -n '1s/^# *//p' "$d/ticket.md" | cut -c1-60)"
+  done < "$IV/results"
+  # tickets never reached (interview stopped early) count with their full points as missed
+  while read -r name; do
+    grep -q "^$name|" "$IV/results" && continue
+    d=$(lab_dir "$name"); max=$((10 * $(yget level "$d"))); totmax=$((totmax + max)); ids="$ids $(yget id "$d")"
+    i=$((i + 1)); printf '  %-2s %-4s %s %-9s %6s %5s %7s  %s\n' "$i" "$(yget id "$d")" "$(iv_dots "$(yget level "$d")")" 'not seen' - - "0/$max" ''
+  done < "$IV/queue"
+  pct=$(( totmax > 0 ? 100 * total / totmax : 0 ))
+  if [ $pct -ge 80 ]; then grade="strong - you'd get the job"; elif [ $pct -ge 60 ]; then grade="solid"
+  elif [ $pct -ge 40 ]; then grade="getting there"; else grade="keep practising (./lab list --learn)"; fi
+  echo "  ${C_BOLD}Total $total/$totmax = $pct %${C_0} - $grade"
+  echo "  Review: ./lab start <id>, then ./lab solution · more questions: docs/INTERVIEW-QUESTIONS.md"
+  echo "$(date '+%F %R') tickets:$ids score:$total/$totmax ($pct %) time:$(mmss "$used")/$(mmss "$(iv_get budget)")" >> "$STATE_DIR/interviews.log"
+}
+cmd_interview() {
+  local sub=${1:-status} n=3 min=""
+  case $sub in
+    help|-h|--help)
+      cat <<EOF
+  ./lab interview [n] [minutes]   n random incidents (default 3); time budget default 15 min per ticket
+  ./lab interview status          ticket k/n, time left, hints used
+  ./lab interview next            move on (an unsolved ticket scores 0); after the last one: the score card
+  ./lab interview stop            end now: score card, nodes removed
+  Points: 10 x level per ticket; each hint -20 %; ./lab solution or solve -> 0; solved after the budget -> half.
+  A passing ./lab verify stops the clock for the ticket. Past score cards: .state/interviews.log
+EOF
+      ;;
+    status)
+      iv_active || { echo "no interview running - ./lab interview [n] [minutes]"; return 0; }
+      echo "Interview: ticket $(iv_get idx)/$(iv_n) · $(iv_left) · hints on this ticket: $(iv_get cur.hints || echo 0)$( [ -f "$IV/cur.solved" ] && echo " · solved")$( [ -f "$IV/cur.revealed" ] && echo " · solution seen")"
+      ;;
+    next|skip)
+      iv_active || die "no interview running - ./lab interview [n] [minutes]"
+      iv_close_ticket
+      if [ "$(iv_get idx)" -lt "$(iv_n)" ]; then
+        echo $(( $(iv_get idx) + 1 )) > "$IV/idx"; iv_ticket
+      else
+        iv_scorecard; rm -rf "$IV"; cmd_stop
+      fi
+      ;;
+    stop|end)
+      iv_active || die "no interview running"
+      iv_close_ticket; iv_scorecard; rm -rf "$IV"; cmd_stop; ok "interview ended"
+      ;;
+    *)
+      if [[ $sub =~ ^[0-9]+$ ]]; then n=$sub; min=${2:-}; else die "usage: ./lab interview [n] [minutes] | status | next | stop | help"; fi
+      [ "$n" -ge 1 ] || die "at least one ticket"
+      [ -z "$min" ] || [[ $min =~ ^[1-9][0-9]*$ ]] || die "minutes must be a number"
+      iv_active && die "an interview is running - ./lab interview status | next | stop"
+      ensure_built
+      rm -rf "$IV"; mkdir -p "$IV"
+      all_labs | while read -r d; do [ "$(yget kind "$d")" = incident ] && basename "$d"; done | shuf -n "$n" > "$IV/queue"
+      n=$(iv_n)
+      echo $(( ${min:-$((15 * n))} * 60 )) > "$IV/budget"; date +%s > "$IV/t0"; echo 1 > "$IV/idx"
+      cat <<EOF
+
+${C_BOLD}Interview mode${C_0}: $n tickets, $(( $(iv_get budget) / 60 )) minutes. One at a time; the lab IDs stay hidden.
+  ./lab verify            when you think it's fixed - a PASS stops the clock for that ticket
+  ./lab interview next    move on (an unsolved ticket scores 0) · ./lab interview status · ./lab interview stop
+  Scoring: 10 points x level; each hint -20 %; solution/solve = 0; solved after the time is up = half.
+EOF
+      iv_ticket
+      ;;
+  esac
+}
+
+# ------------------------------------------------------------ build ---------
+build_image() {   # build_image <tag> <dir> [build args...]
+  local tag=$1 dir=$2; shift 2
+  docker image inspect "$tag" >/dev/null 2>&1 && { ok "$tag"; return 0; }
+  info "Building $tag"
+  docker build -q "$@" -t "$tag" "$LAB_DIR/$dir" >/dev/null || die "image build failed: $tag (re-run with internet)"
+  ok "$tag"
+}
+cmd_build() {
+  local c f specs=""
+  mkdir -p "$CACHE_DIR/mirror/debian" "$CACHE_DIR/mirror/rocky9" "$CACHE_DIR/collections" "$CACHE_DIR/wheels"
+  for c in "$CTL_BASE_IMAGE" "$DEBIAN_BASE_IMAGE" "$ROCKY_BASE_IMAGE" "$REPO_IMAGE"; do
+    docker image inspect "$c" >/dev/null 2>&1 || { info "pulling $c"; docker pull -q "$c" >/dev/null || die "pull failed: $c"; }
+  done
+  build_image "$CTL1_IMAGE" infra/ctl --build-arg BASE="$CTL_BASE_IMAGE" --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" \
+    --build-arg ANSIBLE_CORE_VERSION="$ANSIBLE_CORE_VERSION" --build-arg ANSIBLE_LINT_VERSION="$ANSIBLE_LINT_VERSION" \
+    --build-arg MOLECULE_VERSION="$MOLECULE_VERSION" --build-arg ANSIBLE_NAVIGATOR_VERSION="$ANSIBLE_NAVIGATOR_VERSION" \
+    --build-arg ANSIBLE_BUILDER_VERSION="$ANSIBLE_BUILDER_VERSION" --build-arg YAMLLINT_VERSION="$YAMLLINT_VERSION" \
+    --build-arg TESTINFRA_VERSION="$TESTINFRA_VERSION" --build-arg COLLECTIONS="$COLLECTIONS"
+  build_image "$NODE_DEBIAN_IMAGE" infra/node/debian12 --build-arg BASE="$DEBIAN_BASE_IMAGE"
+  build_image "$NODE_ROCKY_IMAGE" infra/node/rocky9 --build-arg BASE="$ROCKY_BASE_IMAGE"
+  build_image "$EE_BASE_IMAGE" infra/ee-base --build-arg BASE="$CTL_BASE_IMAGE" \
+    --build-arg ANSIBLE_CORE_VERSION="$ANSIBLE_CORE_VERSION" --build-arg COLLECTIONS="$COLLECTIONS"
+
+  if [ ! -f "$CACHE_DIR/mirror/debian/Packages.gz" ]; then
+    info "Mirroring Debian packages (one-time internet)"
+    docker run --rm -e PKGS="$MIRROR_DEBIAN_PKGS" -e EXPLICIT="$MIRROR_DEBIAN_EXPLICIT" -v "$CACHE_DIR/mirror:/mirror" \
+      -v "$LAB_DIR/infra/repo:/build:ro" --entrypoint /build/build-debian.sh "$NODE_DEBIAN_IMAGE" | tail -1
+  fi
+  if [ ! -d "$CACHE_DIR/mirror/rocky9/repodata" ]; then
+    info "Mirroring Rocky 9 packages (one-time internet)"
+    docker run --rm -e PKGS="$MIRROR_ROCKY_PKGS" -v "$CACHE_DIR/mirror:/mirror" -v "$LAB_DIR/infra/repo:/build:ro" \
+      --entrypoint /build/build-rocky9.sh "$NODE_ROCKY_IMAGE" | tail -1
+  fi
+  docker run --rm -v "$CACHE_DIR/mirror:/mirror" "$REPO_IMAGE" chown -R "$(id -u):$(id -g)" /mirror
+  ok "package mirror: $(du -sh "$CACHE_DIR/mirror" | cut -f1)"
+
+  for c in $COLLECTIONS $EXTRA_COLLECTIONS $WAVE2_COLLECTIONS; do
+    f=${c%%:*}; f="${f/./-}-${c#*:}.tar.gz"          # ansible.posix:2.2.2 -> ansible-posix-2.2.2.tar.gz
+    [ -f "$CACHE_DIR/collections/$f" ] || specs="$specs ${c%%:*}:==${c#*:}"
+  done
+  if [ -n "$specs" ]; then
+    info "Downloading collection tarballs:$specs"
+    # one spec per call: the resolver refuses two versions of one collection in a single request
+    # shellcheck disable=SC2086
+    docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$CACHE_DIR/collections:/out" "$CTL1_IMAGE" \
+      bash -c 'cd /tmp && for s in "$@"; do ansible-galaxy collection download --no-deps -p "/tmp/dl-$s" "$s" >/dev/null || exit 1; cp /tmp/dl-"$s"/*.tar.gz /out/; done' _ $specs \
+      || die "collection download failed (re-run with internet)"
+  fi
+  ok "collections: $(find "$CACHE_DIR/collections" -name '*.tar.gz' | wc -l) tarballs"
+  if [ "$(find "$CACHE_DIR/wheels" -name '*.whl' | wc -l)" -lt 5 ]; then
+    info "Downloading the EE wheelhouse"
+    # shellcheck disable=SC2086
+    docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$CACHE_DIR/wheels:/wheels" "$CTL1_IMAGE" \
+      pip download -q -d /wheels $EE_WHEELS
+  fi
+  ok "wheelhouse: $(find "$CACHE_DIR/wheels" -name '*.whl' | wc -l) wheels"
+  build_wave2
+  write_configs
+  ok "build complete - try ./lab list"
+}
+
+# wave 2: company PyPI wheelhouse (cache/pypi/<set>), then ctl:2 (= ctl:1 + EDA/AWS/ansible-test) and moto
+build_wave2() {
+  local p=$CACHE_DIR/pypi gp="get_pip_${SANITY_PIP_VERSION//./_}.py" ctx c
+  mkdir -p "$p"/{eda,aws,moto,sanity}
+  if ! ls "$p"/eda/ansible_rulebook-* "$p"/aws/boto3-* >/dev/null 2>&1; then
+    info "Downloading the EDA + AWS wheelhouse"
+    docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$p:/pypi" "$CTL1_IMAGE" bash -c \
+      "pip download -q -d /pypi/eda ansible-rulebook==$ANSIBLE_RULEBOOK_VERSION && pip download -q -d /pypi/aws boto3==$BOTO3_VERSION" \
+      || die "wheel download failed (re-run with internet)"
+  fi
+  if ! ls "$p"/moto/moto-* >/dev/null 2>&1; then
+    info "Downloading the moto wheelhouse"
+    docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$p:/pypi" "$CTL_BASE_IMAGE" \
+      pip download -q -d /pypi/moto "moto[ec2,server]==$MOTO_VERSION" || die "wheel download failed (re-run with internet)"
+  fi
+  if [ ! -f "$p/sanity/$gp" ]; then
+    info "Downloading the ansible-test sanity wheelhouse (+ pip bootstrap)"
+    # shellcheck disable=SC2016
+    docker run --rm -u "$(id -u)" -e HOME=/tmp -e GP="$gp" -e PIPV="$SANITY_PIP_VERSION" -v "$p:/pypi" "$CTL1_IMAGE" bash -c '
+      set -e; d=$(python3 -c "import ansible_test,os;print(os.path.dirname(ansible_test.__file__))")/_data/requirements
+      cat $d/sanity.*.txt | grep -v -e "^#" -e "^dill" | sort -u > /tmp/req.txt
+      pip download -q -d /pypi/sanity -r /tmp/req.txt "pip==$PIPV"
+      pip wheel -q --no-deps -w /pypi/sanity "$(sed -n "s/^dill @ \([^#]*\).*/\1/p" $d/sanity.pylint.txt)"
+      curl -fsS -o "/pypi/sanity/$GP" "https://ci-files.testing.ansible.com/ansible-test/get-pip-$PIPV.py"' \
+      || die "sanity wheelhouse download failed (re-run with internet)"
+  fi
+  echo "$SANITY_GET_PIP_SHA256  $p/sanity/$gp" | sha256sum -c --quiet - ||
+    { rm -f "$p/sanity/$gp"; die "get-pip bootstrap checksum mismatch (removed - re-run ./lab build)"; }
+  ok "company wheelhouse (cache/pypi): $(find "$p" -name '*.whl' | wc -l) wheels, get-pip sha256 ok"
+  if ! docker image inspect "$CTL_IMAGE" >/dev/null 2>&1; then
+    ctx="$STATE_DIR/build-ctl2"; rm -rf "$ctx"; mkdir -p "$ctx/pypi" "$ctx/collections"
+    cp "$LAB_DIR"/infra/ctl2/{Dockerfile,pip.conf} "$ctx/"; cp -a "$p/eda" "$p/aws" "$ctx/pypi/"; cp "$p/sanity/$gp" "$ctx/get_pip.py"
+    for c in $WAVE2_COLLECTIONS; do cp "$CACHE_DIR/collections/$(echo "${c%%:*}" | tr . -)-${c#*:}.tar.gz" "$ctx/collections/"; done
+    build_image "$CTL_IMAGE" "${ctx#"$LAB_DIR"/}" --build-arg BASE="$CTL1_IMAGE" \
+      --build-arg ANSIBLE_RULEBOOK_VERSION="$ANSIBLE_RULEBOOK_VERSION" --build-arg BOTO3_VERSION="$BOTO3_VERSION" \
+      --build-arg JAVA_PACKAGE="$JAVA_PACKAGE" --build-arg SANITY_PIP_VERSION="$SANITY_PIP_VERSION"
+    rm -rf "$ctx"
+  else ok "$CTL_IMAGE"; fi
+  if ! docker image inspect "$MOTO_IMAGE" >/dev/null 2>&1; then
+    ctx="$STATE_DIR/build-moto"; rm -rf "$ctx"; mkdir -p "$ctx/wheels"
+    cp "$LAB_DIR/infra/moto/Dockerfile" "$ctx/"; cp -a "$p/moto" "$ctx/wheels/"
+    build_image "$MOTO_IMAGE" "${ctx#"$LAB_DIR"/}" --build-arg BASE="$CTL_BASE_IMAGE" --build-arg MOTO_VERSION="$MOTO_VERSION"
+    rm -rf "$ctx"
+  else ok "$MOTO_IMAGE"; fi
+}
+
+cmd_doctor() {
+  local bad=0 i v
+  for i in "$CTL1_IMAGE" "$CTL_IMAGE" "$NODE_DEBIAN_IMAGE" "$NODE_ROCKY_IMAGE" "$EE_BASE_IMAGE" "$MOTO_IMAGE"; do
+    if docker image inspect "$i" >/dev/null 2>&1; then ok "$i"; else warn "$i missing - ./lab build"; bad=1; fi
+  done
+  if [ -f "$CACHE_DIR/mirror/debian/Packages.gz" ] && [ -d "$CACHE_DIR/mirror/rocky9/repodata" ]; then
+    ok "package mirror: $(du -sh "$CACHE_DIR/mirror" | cut -f1)"
+  else
+    warn "package mirror missing - ./lab build"; bad=1
+  fi
+  if running "$CTL"; then
+    v=$(docker exec "$CTL" ansible --version 2>/dev/null | head -1)
+    if [[ $v == *"$ANSIBLE_CORE_VERSION"* ]]; then ok "controller: $v"; else warn "controller runs '$v'"; bad=1; fi
+    v=$(docker exec "$CTL" ansible-rulebook --version 2>/dev/null | head -1)
+    if [[ $v == *"$ANSIBLE_RULEBOOK_VERSION"* ]]; then ok "controller: $v"; else warn "controller: no ansible-rulebook $ANSIBLE_RULEBOOK_VERSION ($CTL_IMAGE?)"; bad=1; fi
+  else
+    warn "controller not running (./lab up, or any ./lab start)"
+  fi
+  if running ans-repo; then ok "mirror served at http://repo.acme.internal"; else warn "mirror not running (./lab up)"; fi
+  ok "cache: $(du -sh "$CACHE_DIR" | cut -f1) · free disk: $(df -h "$LAB_DIR" | awk 'NR==2{print $4}')"
+  if command -v ansible >/dev/null 2>&1; then
+    echo "  note: host ansible ($(ansible --version 2>/dev/null | head -1)) is ignored; the lab uses the controller"
+  fi
+  return $bad
+}
+
+cmd_up()   { ensure_built; infra_up; ok "controller, mirror and network up"; }
+cmd_down() {
+  cmd_stop
+  docker rm -f "$CTL" ans-repo >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+  ok "lab containers and network removed"
+}
+
+# ------------------------------------------------------------ selftest ------
+cmd_selftest() {
+  local targets=() d name t0 broken fixed results=() sel=${1:-all}
+  case $sel in
+    all) mapfile -t targets < <(all_labs) ;;
+    learn|incidents)
+      while read -r d; do [ "$(yget kind "$d")" = "${sel%s}" ] && targets+=("$d"); done < <(all_labs) ;;
+    wave1|wave2)   # incidents of that wave + learn labs that declare it (wave-1 learn labs have no wave:)
+      while read -r d; do [ "$(yget wave "$d")" = "${sel#wave}" ] && targets+=("$d"); done < <(all_labs) ;;
+    *) for d in "$@"; do targets+=("$(lab_dir "$d")"); done ;;
+  esac
+  [ ${#targets[@]} -gt 0 ] || die "nothing to test for '$sel'"
+  export LAB_SELFTEST=1     # don't mark labs as solved
+  for d in "${targets[@]}"; do
+    name=$(basename "$d"); t0=$SECONDS
+    echo; info "${C_BOLD}selftest $name${C_0}"
+    if ! ( cmd_start "$name" ) >/dev/null; then
+      results+=("$(printf '%-38s SETUP FAILED %4ss' "$name" $((SECONDS - t0)))")
+      continue
+    fi
+    broken=ok; ( LAB_EXPECT_FAIL=1 cmd_verify ) >/dev/null 2>&1 && broken="NOT BROKEN"
+    ( cmd_solve ) >/dev/null 2>&1 || true
+    fixed=ok; ( cmd_verify ) || fixed="NOT FIXED"
+    results+=("$(printf '%-38s broken:%-10s fixed:%-10s %4ss' "$name" "$broken" "$fixed" $((SECONDS - t0)))")
+  done
+  cmd_stop
+  echo; echo "${C_BOLD}Selftest results${C_0}"; printf '  %s\n' "${results[@]}"
+  printf '%s\n' "${results[@]}" | grep -qE 'NOT |FAILED' && return 1 || return 0
+}
+
+# ----------------------------------------------------------------- main -----
+cmd=${1:-help}; shift || true
+case $cmd in
+  build) cmd_build ;;
+  doctor) cmd_doctor ;;
+  list|ls) cmd_list "$@" ;;
+  start) cmd_start "$@" ;;
+  ticket) cmd_ticket ;;
+  sh) cmd_sh ;;
+  run) cmd_run "$@" ;;
+  ssh) cmd_ssh "$@" ;;
+  node) cmd_node "$@" ;;
+  ee) cmd_ee "$@" ;;
+  eda) cmd_eda "$@" ;;
+  interview|iv) cmd_interview "$@" ;;
+  verify) cmd_verify ;;
+  hint) cmd_hint "$@" ;;
+  diff) cmd_diff ;;
+  solution) cmd_solution "$@" ;;
+  solve) cmd_solve ;;
+  reset) cmd_reset ;;
+  stop) cmd_stop; ok "stopped" ;;
+  status|st) cmd_status ;;
+  up) cmd_up ;;
+  down) cmd_down ;;
+  selftest) cmd_selftest "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

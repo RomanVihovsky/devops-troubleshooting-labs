@@ -1,0 +1,8 @@
+id: E06
+title: The DB migration ran once per batch
+kind: incident
+level: 3
+domain: execution
+nodes: [app1, app2, db1]
+wave: 1
+est: 20m

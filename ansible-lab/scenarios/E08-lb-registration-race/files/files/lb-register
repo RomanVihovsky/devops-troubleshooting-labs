@@ -1,0 +1,39 @@
+#!/bin/bash
+# lb-register - the network team's backend registry for haproxy on the load balancers. DO NOT EDIT HERE:
+# owned by the network team (netops/lb-tools), vendored for the LB role.
+#   lb-register add <name> <addr:port> | del <name> | prune <name>... | list | reset
+set -euo pipefail
+STATE=/var/lib/lb/backends            # "name addr:port" per line
+CFG=/etc/haproxy/haproxy.cfg
+mkdir -p /var/lib/lb; touch "$STATE"
+cmd=${1:?usage: lb-register add|del|prune|list|reset}; shift
+current=$(cat "$STATE")
+case $cmd in
+  list)  printf '%s\n' "$current" | sed '/^$/d'; exit 0 ;;
+  add)   name=${1:?name}; addr=${2:?addr:port}
+         if grep -q "^$name " <<<"$current"; then echo "already registered: $name"; exit 0; fi
+         new=$(printf '%s\n%s %s\n' "$current" "$name" "$addr" | sed '/^$/d'); msg="added $name" ;;
+  del)   new=$(grep -v "^${1:?name} " <<<"$current" || true); msg="removed $1" ;;
+  prune) keep=" $* "; new=""; msg="nothing to prune"
+         while read -r n a; do
+           [ -n "$n" ] || continue
+           if [[ $keep == *" $n "* ]]; then new=$(printf '%s\n%s %s' "$new" "$n" "$a"); else msg="pruned"; fi
+         done <<<"$current"
+         new=$(sed '/^$/d' <<<"$new") ;;
+  reset) new=""; msg="registry emptied" ;;
+  *) echo "unknown command $cmd" >&2; exit 2 ;;
+esac
+[ "$new" = "$current" ] && [ "$cmd" != reset ] && { echo "$msg"; exit 0; }
+# render the full config and validate it before it goes live (takes a moment on the big LBs)
+tmp=$(mktemp)
+cat /etc/haproxy/haproxy.cfg.head > "$tmp"
+while read -r n a; do [ -n "$n" ] && echo "    server $n $a check inter 1s rise 1 fall 2"; done <<<"$new" >> "$tmp"
+haproxy -c -q -f "$tmp"
+sleep 2
+# NET-12: haproxy reloads must not overlap - apply under a lock
+exec 9>/run/lb-register.lock
+flock 9
+printf '%s\n' "$new" | sed '/^$/d' > "$STATE"
+install -m 0644 "$tmp" "$CFG"; rm -f "$tmp"
+systemctl reload haproxy
+echo "$msg"

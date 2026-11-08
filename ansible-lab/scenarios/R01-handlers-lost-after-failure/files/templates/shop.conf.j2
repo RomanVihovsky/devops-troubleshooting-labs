@@ -1,0 +1,6 @@
+# managed by Ansible
+server {
+    listen 8080;
+    location = /version { return 200 "{{ shop_version }}\n"; }
+    location / { return 200 "ACME shop {{ shop_version }}\n"; }
+}

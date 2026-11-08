@@ -1,0 +1,8 @@
+id: I06
+title: Failed to set permissions on the temporary files
+kind: incident
+level: 2
+domain: inventory
+nodes: [app1]
+wave: 1
+est: 15m

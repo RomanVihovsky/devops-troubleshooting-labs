@@ -1,0 +1,39 @@
+# usage: ansible-playbook deploy.yml
+# OPS-3011: strategy free - warm-up and migration times differ a lot per node, nobody waits for the slowest one
+- name: Deploy the shop cluster
+  hosts: shop
+  become: true
+  gather_facts: false
+  strategy: free
+  tasks:
+    - name: Shop tools
+      ansible.builtin.copy:
+        src: "files/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+      loop:
+        - shop-warmup
+        - shop-migrate
+
+    - name: Warm up the catalog cache
+      ansible.builtin.command: "/usr/local/bin/shop-warmup {{ shop_warmup_seconds }}"
+      changed_when: false
+
+    - name: Migrate the local data store
+      ansible.builtin.command: "/usr/local/bin/shop-migrate {{ shop_migrate_seconds }}"
+      changed_when: false
+
+    - name: Read the node ID (written by the migration)
+      ansible.builtin.slurp:
+        src: /var/lib/shop/node_id
+      register: shop_node_id_file
+
+    - name: Remember the node ID
+      ansible.builtin.set_fact:
+        shop_node_id: "{{ shop_node_id_file.content | b64decode | trim }}"
+
+    - name: Cluster membership
+      ansible.builtin.template:
+        src: templates/cluster.conf.j2
+        dest: /etc/shop-cluster.conf
+        mode: "0644"

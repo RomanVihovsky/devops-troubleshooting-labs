@@ -1,0 +1,41 @@
+- name: App
+  hosts: app
+  become: true
+  tasks:
+    - name: App directory
+      ansible.builtin.file:
+        path: /opt/app
+        state: directory
+        mode: "0755"
+    - name: App unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/acme-app.service
+        content: |
+          [Unit]
+          Description=ACME app
+          [Service]
+          ExecStart=/bin/sleep infinity
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
+    - name: Current version
+      ansible.builtin.command: cat /opt/app/VERSION
+      register: app_current
+      changed_when: false
+      failed_when: false
+    - name: Stop the app for the upgrade
+      ansible.builtin.service:
+        name: acme-app
+        state: stopped
+      when: app_current.rc == 0 and app_current.stdout != app_version
+    - name: Install the release
+      ansible.builtin.copy:
+        dest: /opt/app/VERSION
+        content: "{{ app_version }}\n"
+        mode: "0644"
+    - name: Run the app
+      ansible.builtin.systemd_service:
+        name: acme-app
+        state: started
+        enabled: true
+        daemon_reload: true

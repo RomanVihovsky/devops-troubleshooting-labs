@@ -1,0 +1,33 @@
+- name: Web tier
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Shop site on 8080
+      ansible.builtin.template:
+        src: templates/site.conf.j2
+        dest: /etc/nginx/conf.d/shop.conf
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Shop page
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: /usr/share/nginx/html/index.html
+        mode: "0644"
+
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

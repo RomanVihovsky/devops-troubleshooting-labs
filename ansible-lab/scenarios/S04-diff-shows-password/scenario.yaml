@@ -1,0 +1,8 @@
+id: S04
+title: The PR comment shows the old and the new DB password
+kind: incident
+level: 1
+domain: secrets
+nodes: [app1]
+wave: 1
+est: 15m

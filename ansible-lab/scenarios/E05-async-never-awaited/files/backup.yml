@@ -1,0 +1,24 @@
+- name: Nightly backup
+  hosts: app
+  become: true
+  tasks:
+    - name: Backup tool
+      ansible.builtin.copy:
+        src: bin/acme-dump
+        dest: /usr/local/bin/acme-dump
+        mode: "0755"
+    - name: Backup directory
+      ansible.builtin.file:
+        path: /var/backups/acme
+        state: directory
+        mode: "0750"
+    - name: Dump the database (long-running - don't hold the SSH session)
+      ansible.builtin.command: /usr/local/bin/acme-dump /var/backups/acme/acme.sql {{ backup_label }}
+      async: 600
+      poll: 0
+      changed_when: true
+    - name: Ship the dump to the backup store
+      ansible.builtin.fetch:
+        src: /var/backups/acme/acme.sql
+        dest: "backups/{{ inventory_hostname }}-acme.sql"
+        flat: true

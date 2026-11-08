@@ -1,0 +1,6 @@
+- name: Web node
+  hosts: web
+  become: true
+  roles:
+    - web
+    - metrics

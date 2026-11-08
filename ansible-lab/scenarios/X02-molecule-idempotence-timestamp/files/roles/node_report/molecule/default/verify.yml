@@ -1,0 +1,15 @@
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the report
+      ansible.builtin.slurp:
+        src: /etc/acme/node-report.txt
+      register: node_report_raw
+
+    - name: Report names the host and the OS
+      ansible.builtin.assert:
+        that:
+          - "'host=test1' in (node_report_raw.content | b64decode)"
+          - "'os=Debian' in (node_report_raw.content | b64decode)"

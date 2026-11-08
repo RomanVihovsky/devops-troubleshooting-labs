@@ -1,0 +1,6 @@
+# TODO: load OS-specific vars (first_found) instead of the hard-coded Debian path
+- name: Environment file
+  ansible.builtin.template:
+    src: acme.env.j2
+    dest: /etc/default/acme
+    mode: "0644"

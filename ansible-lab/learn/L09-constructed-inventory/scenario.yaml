@@ -1,0 +1,7 @@
+id: L09
+title: Inventory at scale - constructed groups and patterns
+kind: learn
+level: 2
+domain: inventory
+nodes: [web1, web2, app1, db1]
+est: 20m

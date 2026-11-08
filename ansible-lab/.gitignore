@@ -1,0 +1,5 @@
+# ansible-lab: the student's working copy (has its own .git) - created by ./lab start
+/workspace/
+# local planning input (a ChatGPT research summary with third-party citations) - not part of the lab
+/ansible-lab-data.pdf
+# .state/ (SSH keys, CI checkout, git registry) and cache/ are ignored by the repository's root .gitignore

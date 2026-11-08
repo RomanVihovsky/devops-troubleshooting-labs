@@ -1,0 +1,14 @@
+- name: App DB client
+  hosts: app
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: DB client config
+      ansible.builtin.template:
+        src: templates/db.ini.j2
+        dest: /etc/acme/db.ini
+        mode: "0600"

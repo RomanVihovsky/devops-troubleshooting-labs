@@ -1,0 +1,48 @@
+- name: Web tier
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Shop site on 8080
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/shop.conf
+        content: |
+          # managed by Ansible
+          server {
+              listen 8080 default_server;
+              root /usr/share/nginx/html;
+          }
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Shop page
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/index.html
+        content: "{{ shop_title }} {{ shop_release }} on {{ inventory_hostname }}\n"
+        mode: "0644"
+
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+- name: Database tier
+  hosts: db
+  become: true
+  tasks:
+    - name: Role marker
+      ansible.builtin.copy:
+        dest: /etc/acme-db-role
+        content: "{{ db_role }}\n"
+        mode: "0644"

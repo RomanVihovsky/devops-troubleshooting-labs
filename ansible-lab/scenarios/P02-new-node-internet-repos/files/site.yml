@@ -1,0 +1,18 @@
+- name: Web node
+  hosts: web
+  become: true
+  tasks:
+    - name: Install nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+    - name: Home page
+      ansible.builtin.copy:
+        dest: /usr/share/nginx/html/index.html
+        content: "ACME on {{ inventory_hostname }}\n"
+        mode: "0644"
+    - name: Run nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true

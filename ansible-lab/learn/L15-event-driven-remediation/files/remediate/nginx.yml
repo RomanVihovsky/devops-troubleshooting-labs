@@ -1,0 +1,20 @@
+# Run by the EDA activation (rulebooks/nginx.yml -> run_playbook). The alert that fired the rule is in
+# the extra var `ansible_eda.event` (`ansible_eda.event.payload` = the JSON body monitoring posted).
+- name: Heal nginx
+  # TODO: run_playbook runs this against every host of the ruleset's `hosts:` - restrict it to the alert's host
+  hosts: web
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+    - name: Wait until the shop answers
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8080/
+      register: shop_page
+      until: shop_page.status == 200
+      retries: 10
+      delay: 1

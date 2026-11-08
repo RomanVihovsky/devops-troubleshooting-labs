@@ -1,0 +1,5 @@
+- name: Logrotate policy for ACME apps
+  ansible.builtin.template:
+    src: acme.j2
+    dest: /etc/logrotate.d/acme
+    mode: "0644"

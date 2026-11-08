@@ -1,0 +1,18 @@
+- name: Install haproxy
+  ansible.builtin.package:
+    name: [haproxy, socat]
+    state: present
+
+- name: haproxy config
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Run haproxy
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true

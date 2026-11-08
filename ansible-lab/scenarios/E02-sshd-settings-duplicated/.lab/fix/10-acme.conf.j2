@@ -1,0 +1,4 @@
+# managed by Ansible - sshd_settings
+{% for key, value in sshd_settings.items() %}
+{{ key }} {{ value }}
+{% endfor %}

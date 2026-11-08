@@ -1,0 +1,9 @@
+- name: Login message
+  hosts: all
+  become: true
+  tasks:
+    - name: Message of the day
+      ansible.builtin.copy:
+        dest: /etc/motd
+        content: "{{ lookup('ansible.builtin.file', 'templates/motd.j2') }}\n"
+        mode: "0644"

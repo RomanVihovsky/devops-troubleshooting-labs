@@ -1,0 +1,8 @@
+id: S02
+title: Initial passwords in the CI log
+kind: incident
+level: 1
+domain: secrets
+nodes: [web1]
+wave: 1
+est: 15m

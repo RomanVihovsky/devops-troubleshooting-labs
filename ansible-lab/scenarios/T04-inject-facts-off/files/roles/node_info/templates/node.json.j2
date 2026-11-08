@@ -1,0 +1,9 @@
+{
+  "host": "{{ ansible_hostname }}",
+  "os": "{{ ansible_distribution }} {{ ansible_distribution_major_version }}",
+  "family": "{{ ansible_os_family }}",
+  "admin_group": "{{ node_info_admin_group }}",
+  "cpus": {{ ansible_processor_vcpus }},
+  "python": "{{ ansible_python_version | default('n/a') }}",
+  "inventory_name": "{{ inventory_hostname }}"
+}

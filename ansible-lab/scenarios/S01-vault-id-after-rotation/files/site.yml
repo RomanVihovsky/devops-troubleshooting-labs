@@ -1,0 +1,14 @@
+- name: App secrets
+  hosts: all
+  become: true
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
+    - name: DB credentials
+      ansible.builtin.copy:
+        dest: /etc/acme/db.env
+        content: "DB_PASSWORD={{ db_password }}\n"
+        mode: "0600"

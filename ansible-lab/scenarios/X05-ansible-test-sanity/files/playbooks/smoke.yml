@@ -1,0 +1,56 @@
+- name: Smoke test acme.ops.app_flag
+  hosts: web1
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Start clean
+      ansible.builtin.file:
+        path: /etc/shop/flags.conf
+        state: absent
+
+    - name: Set a flag
+      acme.ops.app_flag:
+        name: new_checkout
+        value: "on"
+        path: /etc/shop/flags.conf
+      register: smoke_set
+
+    - name: Set it again (idempotent)
+      acme.ops.app_flag:
+        name: new_checkout
+        value: "on"
+        path: /etc/shop/flags.conf
+      register: smoke_again
+
+    - name: Change it in check mode
+      acme.ops.app_flag:
+        name: new_checkout
+        value: "off"
+        path: /etc/shop/flags.conf
+      check_mode: true
+      register: smoke_check
+
+    - name: Second flag, then remove it
+      acme.ops.app_flag:
+        name: "{{ item.name }}"
+        value: "{{ item.value | default(omit) }}"
+        state: "{{ item.state }}"
+        path: /etc/shop/flags.conf
+      loop:
+        - {name: old_banner, value: "yes", state: present}
+        - {name: old_banner, state: absent}
+
+    - name: Read the flags file
+      ansible.builtin.slurp:
+        src: /etc/shop/flags.conf
+      register: smoke_file
+
+    - name: Verify
+      ansible.builtin.assert:
+        that:
+          - smoke_set is changed
+          - smoke_again is not changed
+          - smoke_check is changed
+          - smoke_check.previous == "on"
+          - "'new_checkout=on' in (smoke_file.content | b64decode)"
+          - "'old_banner' not in (smoke_file.content | b64decode)"

@@ -1,0 +1,8 @@
+id: I08
+title: "Scale-out web3 never got the release - the deploy fails on an instance terminated last week"
+kind: incident
+level: 2
+domain: inventory
+nodes: [web1, web2, web3, app1]
+wave: 2
+est: 25m

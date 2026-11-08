@@ -1,0 +1,15 @@
+- name: Rolling app deploy
+  hosts: app
+  become: true
+  serial: 1
+  tasks:
+    - name: Run DB migrations
+      ansible.builtin.shell: echo "$(date +%s) migrate {{ app_version }}" >> /var/lib/acme/migrations.log
+      delegate_to: db1
+      run_once: true
+      changed_when: true
+    - name: Install the release
+      ansible.builtin.copy:
+        dest: /opt/app/VERSION
+        content: "{{ app_version }}\n"
+        mode: "0644"

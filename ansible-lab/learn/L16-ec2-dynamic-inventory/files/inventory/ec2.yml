@@ -1,0 +1,11 @@
+# EC2 inventory for the shop (platform team template).
+# Credentials and the API endpoint come from the CI runner's environment (AWS_* variables), never from the repo.
+plugin: amazon.aws.aws_ec2
+
+# Given: our instances are reached by their Name tag + private IP (public DNS names don't resolve inside the VPC)
+hostnames:
+  - tag:Name
+compose:
+  ansible_host: private_ip_address
+
+# TODO: regions, filters, keyed_groups

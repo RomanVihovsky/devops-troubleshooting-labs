@@ -1,0 +1,15 @@
+- name: Service catalog
+  hosts: web
+  become: true
+  vars:
+    catalog:
+      services:
+        - {name: shop, public: true}
+        - {name: admin, public: false}
+        - {name: api, public: true}
+  tasks:
+    - name: Config directory
+      ansible.builtin.file:
+        path: /etc/acme
+        state: directory
+        mode: "0755"
