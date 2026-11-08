@@ -1,237 +1,262 @@
-# kubernetes-lab - plan (draft for approval)
+# kubernetes-lab - plan (v2, approved 2026-11-08)
 
-A local break/fix playground for **Kubernetes troubleshooting** - the CKA "Troubleshooting"
-domain (30% of the exam), the scenario questions interviewers ask, and the failure classes
-from real postmortems (k8s.af). Same workflow as `../swarm-lab` and `../linux-lab`:
+A local break/fix playground for **Kubernetes troubleshooting**:
+- the CKA "Troubleshooting" domain (30% of the exam);
+- the scenario questions interviewers ask;
+- failure classes from real postmortems (k8s.af);
+- since v2, **Helm + Argo CD GitOps and secret management** (from
+  [kubernetes_lab_research_english.md](kubernetes_lab_research_english.md)).
+
+Same workflow as `../ansible-lab` and `../terra-labs`:
 
 ```
-./lab start P08        # fresh namespace (or fresh cluster), broken on purpose, ticket printed
-./lab sh               # shell in the lab VM: kubectl, k9s, helm, stern, etcdctl...
+./lab start D03        # broken on purpose, ticket printed
+./lab node cp1         # "ssh into the node" of a CKA task; kubectl/helm/argocd work on the desktop
 ./lab verify           # PASS / FAIL against the ticket's "Test"
 ./lab hint | solution | solve
-./lab interview        # 3 random tickets, 45-minute timer, scored like a real interview
+./lab interview        # 3 random tickets against the clock
 ```
 
 Companion documents:
-* [docs/CATALOG.md](docs/CATALOG.md) - **155 scenarios**: symptom, how each is emulated, how it's verified (spoilers!)
-* [docs/INTERVIEW-QUESTIONS.md](docs/INTERVIEW-QUESTIONS.md) - **~170 interview questions** with the key points of a good answer
+- [docs/HOST-SETUP.md](docs/HOST-SETUP.md) - the VirtualBox VMs: one-time steps and the kit;
+- [docs/CATALOG.md](docs/CATALOG.md) - every scenario: symptom, emulation, verification (spoilers!);
+- [docs/INTERVIEW-QUESTIONS.md](docs/INTERVIEW-QUESTIONS.md) - interview questions with the key points of a good answer.
 
 ---
 
-## 0. Decisions (questionnaire, 2026-11-04)
+## 0. Decisions
 
-| Question | Answer |
-|---|---|
-| Cluster environment | **Both**: kind inside a KVM VM now (option B); kubeadm-on-3-VMs track later (option C) for upgrades (O12) and per-node-kernel scenarios |
-| Build scope | **Waves**: ~50 core scenarios first, self-tested; then waves 2 and 3 |
-| VM size | **6 vCPU / 10 GiB RAM / ~15 GB disk**, 4-node cluster (1 control plane + 3 workers) |
-| Downloads | **Approved**: ~4-5 GB once into `cache/` and the VM registry; offline afterwards |
+| Date | Question | Answer |
+|---|---|---|
+| 2026-11-04 | Build scope | Waves, each self-tested |
+| 2026-11-04 | Downloads | Approved: a few GB once, offline afterwards |
+| 2026-11-04 | Nested KVM in the desktop VM | **Crashed VirtualBox** (§9). Nothing is virtualized inside the desktop VM, ever |
+| 2026-11-08 | Cluster | **Real kubeadm cluster in sibling VirtualBox VMs**. kind dropped |
+| 2026-11-08 | Topology | 1 control plane + 3 workers + a gateway VM (~32 GB free for it); spare w4 for join scenarios |
+| 2026-11-08 | Who creates the VMs | **A kit you run on the VirtualBox host** (`k8slab.bat` / `k8slab.sh`). No SSH into Windows: `./lab` only talks to the VMs |
+| 2026-11-08 | GitOps / secrets track | In full: Helm charts, Gitea, Argo CD, Sealed Secrets, ESO + OpenBao, SOPS + age |
 
-## 1. What we're preparing for (research summary)
+## 1. What we're preparing for
 
 | Source | What it tells us |
 |---|---|
-| CKA curriculum (Feb 2025 revision) | Troubleshooting = **30%**, the biggest domain: clusters & nodes, cluster components, resource monitoring, container output streams, services & networking. Revision added Helm, Kustomize, Gateway API, CRDs/operators |
-| Killer Shell / Killercoda CKA drills | Broken `kube-apiserver` static-pod manifests (several errors at once, one in `metadata`), broken controller-manager, broken kubelet config |
-| Interview guides (techinterview.org, kube-dojo, jorijn.com KB) | Pod states (CrashLoopBackOff, Pending, ImagePullBackOff, OOMKilled, CreateContainerConfigError), node NotReady and **what happens to StatefulSet pods**, probes, `logs --previous`, topology-spread Pending with free capacity |
-| k8s.af failure stories | DNS (`ndots:5` multiplying lookups, CoreDNS OOM), conntrack races (5 s DNS delays), CPU-limit throttling, etcd hitting its storage quota, webhooks taking clusters down |
+| CKA curriculum (Feb 2025 revision) | Troubleshooting is **30%**, the biggest domain: clusters and nodes, cluster components, monitoring, container output, services and networking. Helm, Kustomize, Gateway API and CRDs/operators were added |
+| Killer Shell / Killercoda CKA drills | Broken static-pod manifests (several errors at once), broken controller-manager, broken kubelet config, kubeadm upgrades, etcd backup/restore |
+| Interview guides | Pod states, node NotReady and **what happens to StatefulSet pods**, probes, `logs --previous`, Pending with free capacity |
+| k8s.af failure stories | DNS (`ndots:5`, CoreDNS OOM), conntrack races, CPU throttling, etcd quota, webhooks taking clusters down |
+| Research report (2026-11-08) | Multi-VM VirtualBox for realism. Helm + Argo CD (render vs Helm-managed release, drift, AppProjects). Sealed Secrets → ESO + Vault/OpenBao → SOPS. RBAC, NetworkPolicy, TLS, encryption at rest, rotation, audit. 8 proposed scenarios |
 
-## 2. Environment design
+## 2. Environment
 
-### 2.1 Hard constraints learned on this machine
-* Two freezes of your host during linux-lab development: a **privileged** systemd container, and
-  **disk-write throttling** on the host's root disk. Kubernetes-in-Docker (kind/k3d/minikube-docker)
-  needs exactly that: privileged node containers running systemd + containerd + iptables.
-* Your machine is itself a KVM guest **with nested virtualization**: `/dev/kvm` is usable by
-  `admin`, `qemu-system-x86_64` is installed, AMD-V is exposed. 8 vCPU, 19 GiB RAM, **18 GB free disk**.
-* No passwordless sudo, Docker Hub was flaky earlier, no compose plugin on the host.
+### 2.1 Shape
 
-### 2.2 Options considered
+```
+Windows 11 + VirtualBox 7.0          you run once:  k8slab.bat create   (Linux/macOS: ./k8slab.sh create)
+│  host-only 192.168.56.0/24 (host .1)
+├─ desktop VM (Ubuntu)   ./lab, kubectl, helm, argocd, kubeseal, sops+age, bao, k9s, stern
+│     ssh lab@192.168.56.x => provisioning, scenarios, resets;  kubectl => https://192.168.56.20:6443
+├─ k8s-gw   .20  haproxy :6443 (k8s-api.lab -> cp1), registry :5000 + htpasswd :5001, Gitea :3000,
+│               OpenBao :8200 (TLS, lab CA), NFS, dnsmasq (*.lab), chrony, apt-cacher-ng
+├─ k8s-cp1  .21  kubeadm control plane, stacked etcd
+├─ k8s-w1 .31 zone-a · k8s-w2 .32 zone-a · k8s-w3 .33 zone-b
+└─ reserved .22/.23 (HA later) · .34 k8s-w4 (spare) · .200-.220 MetalLB pool
+```
 
-| Option | Isolation from host | Realism | Cost / complexity | Verdict |
+| VM | vCPU | RAM | NIC1 | NIC2 |
 |---|---|---|---|---|
-| A. kind/k3d directly on the host | **none** (privileged containers) | good | low | **rejected** - same class of risk that froze the host |
-| B. **kind inside one KVM VM** | full (own kernel) | good: kubeadm-built nodes, static pods, systemd kubelet, containerd, etcd, PKI | medium | **recommended** |
-| C. kubeadm on 3 KVM VMs | full | best (real per-node kernels, kubeadm upgrades) | high: 3 VMs, L2 networking without root, ~3x RAM/disk | optional later track |
-
-### 2.3 Recommended: kind inside a KVM VM
-
-```
-host (your desktop, unprivileged)
-│  ./lab  (bash CLI)           .state/kubeconfig -> host kubectl works too
-│  qemu-system-x86_64 -enable-kvm  (user process, capped: systemd-run --user -p MemoryMax=11G -p CPUQuota=600%)
-│     user-mode NIC: hostfwd 127.0.0.1:2222->22 (ssh), :6443->6443 (API), :8080->80 / :8443->443 (gateway)
-│
-└── VM "k8slab"  Ubuntu 24.04 cloud image, 6 vCPU, 10 GiB RAM, 40 GiB thin qcow2
-     │  docker, kind, kubectl, helm, k9s, kubectx/kubens, stern, jq/yq, etcdctl, crictl
-     │  registry:5000 (plain)  + registry-auth:5001 (htpasswd)  <- all lab images, preloaded
-     │
-     └── kind cluster "lab" (Kubernetes = current CKA minor)          docker network "kind"
-          ├─ lab-control-plane   kube-apiserver, etcd, scheduler, controller-manager (static pods)
-          ├─ lab-worker          zone=zone-a
-          ├─ lab-worker2         zone=zone-a
-          └─ lab-worker3         zone=zone-b
-          addons: Calico (CNI + NetworkPolicy), CoreDNS, metrics-server, Traefik (Ingress +
-                  Gateway API), local-path-provisioner, csi-hostpath (expansion/snapshots)
-```
+| k8s-gw | 1 | 3 GB | NAT, DHCP, default route | host-only, fixed MAC, static IP |
+| k8s-cp1 | 2 | 4 GB | same | same |
+| k8s-w1..w3 | 2 | 4 GB | same | same |
+| total | 9 | 19 GB | | |
 
 Why this shape:
-* **Safety**: everything privileged lives inside the VM's kernel. Worst case the VM hangs and
-  `./lab vm kill` stops it; the host only runs one unprivileged QEMU process with a hard
-  memory/CPU cap.
-* **Realism**: kind nodes are kubeadm clusters - `/etc/kubernetes/manifests`, `/etc/kubernetes/pki`,
-  `systemctl status kubelet`, `journalctl -u kubelet`, `crictl ps`, `etcdctl`. `./lab node lab-worker2`
-  is the "ssh into the node" of a CKA task.
-* **The VM has its own clock** - certificate-expiry scenarios can move time safely (impossible
-  in containers on the host).
-* **Offline after the first build** - images live in the VM's registry and in the golden disk.
+- **Isolation**: privileged things run in their own VMs, never in the desktop VM.
+- **Realism**: real kernels, systemd, kubelet, containerd, swap, modules, clocks and NICs.
+- **Fault classes kind can't do**: node partitions, reboots, swap, `br_netfilter`, clock skew and kubeadm upgrades
+  become real.
 
-### 2.4 Provisioning (no root needed on the host)
-1. Download the Ubuntu 24.04 cloud image once into `cache/` (~600 MB).
-2. cloud-init **NoCloud over HTTP**: the lab serves `user-data` from `127.0.0.1` with Python;
-   QEMU passes `-smbios type=1,serial=ds=nocloud;s=http://10.0.2.2:<port>/` (no ISO tools needed).
-3. First boot installs packages + tools, pulls/builds all images into the in-VM registry,
-   creates the baseline cluster, runs smoke tests.
-4. Shut down -> `golden.qcow2` (read-only backing file). Daily work happens in `work.qcow2`, an
-   overlay on top of it.
+Network decisions:
+- **Host-only, not an Internal Network**: the desktop and Windows must reach the nodes and MetalLB IPs, and an
+  Internal Network would need a router VM.
+- **Pinned addresses**: every VM's NAT NIC is 10.0.2.15 (the classic kubeadm-on-VirtualBox trap). kubelet
+  `--node-ip`, kubeadm `advertiseAddress` and Calico autodetection are pinned to 192.168.56.0/24. Calico uses
+  `cidr=`, not an interface name: the seedtest showed the names differ (QEMU `ens8`, VirtualBox `enp0s8`).
+- **Overlay**: pod CIDR 10.244.0.0/16, Calico VXLAN. Services 10.96.0.0/12.
+- **API endpoint**: `controlPlaneEndpoint: k8s-api.lab:6443` goes through haproxy on gw. certSANs include .20, so
+  the desktop kubeconfig needs no `/etc/hosts`.
+- **Offline gate**: an nft drop of NAT egress on every VM. Nothing may need the internet after the build.
 
-### 2.5 Reset strategy (fast and clean)
+### 2.2 The VirtualBox kit (`infra/vbox/`, built by `./lab vm kit`)
 
-| Level | Used for | How | Time |
+| Piece | Role |
+|---|---|
+| `nodes.csv` | Single source of truth: name, cpus, mem, ip, NAT MAC, host-only MAC, role. Read by both scripts, `./lab` and the seed |
+| `k8slab.bat` / `k8slab.sh` | Same commands: `check`, `create`, `start`, `stop`, `status`, `snapshot`, `restore`, `destroy`. Only VBoxManage, only `k8s-*` VMs from `nodes.csv`, no admin rights |
+| Ubuntu image | Release VMDK + SHA256 from `versions.env`, downloaded once, converted to one **multiattach** base VDI; each VM gets a differencing disk |
+| `seed.iso` | One generic cloud-init NoCloud seed for all VMs, built by `tools/mkseed.py` (pycdlib wheel, no pip/sudo). It holds user `lab` + the desktop's key, and network-config that matches both NICs of every node by MAC. `k8slab-identity` sets the hostname and `/etc/hosts` from the NIC2 MAC |
+| Delivery | `./lab vm kit` copies the kit into the VirtualBox shared folder when writable, otherwise leaves it in `.state/kit/` |
+
+### 2.3 Provisioning and baseline (`./lab`, over SSH)
+
+1. `./lab vm wait`: SSH, identity and cloud-init done on every VM.
+2. `./lab vm provision`: gw first, then the nodes in parallel through gw's apt cache and registry mirror, so
+   internet downloads happen once.
+   - gw: docker-ce, apt-cacher-ng, registry (every pinned image copied once), haproxy, dnsmasq, chrony, NFS,
+     Gitea, OpenBao.
+   - nodes: containerd 2.x, kubeadm/kubelet/kubectl 1.36 and 1.37, crictl, etcdctl, images pre-pulled.
+3. `./lab cluster build --version 1.36`: kubeadm v1beta4 init + joins, Calico, CoreDNS, metrics-server,
+   MetalLB L2, Traefik (Ingress + Gateway API), local-path, csi-driver-nfs.
+   - Then it upgrades to 1.37 with the upgrade scenario's reference fix, so the baseline proves the path.
+   - Then it adds the GitOps/secrets stack (§3).
+4. `./lab cluster golden`: per-node tars of managed paths, an etcd snapshot and gw data, all **kept on the
+   desktop** (`.state/golden/`), never on the nodes for you to find.
+5. Once: you run `k8slab.bat snapshot baseline`, the manual panic button.
+
+### 2.4 Reset ladder (in-guest; `./lab` has no hypervisor access)
+
+| Level | Used for | Mechanism | Target |
 |---|---|---|---|
-| namespace | ~75% of scenarios (pods, services, config, RBAC, storage...) | delete scenario namespaces + cluster objects labelled `lab.scenario=<id>`, restore baseline addons if touched | 5-20 s |
-| cluster | control-plane, node, CNI, etcd, cert scenarios | `kind delete` + `kind create` from preloaded images + addons | ~2 min |
-| VM | anything weird, clock changes | throw away `work.qcow2`, new overlay on `golden.qcow2`, boot | ~1-2 min |
+| ns | ~70% of scenarios | Delete objects/namespaces labelled `lab.scenario=<id>` and the scenario's Argo CD apps; Gitea `baseline` → `main`; restore the OpenBao kv | 5-20 s |
+| node | Node/runtime faults | Push the golden tar; undo nft `lab_fault`, tc, sysctls, swap, modules, SIGSTOP and clock; restart containerd + kubelet | 15-40 s |
+| cluster | Control plane, etcd, certs, gw | Node reset everywhere + `etcdutl snapshot restore` + restart the control plane and kubelets + gw data + `doctor` | 2-3 min |
+| rebuild | Version switch (upgrade scenarios start at 1.36), anything worse | `kubeadm reset` + build + golden | ~10 min |
+| vm (manual) | SSH gone | `k8slab.bat restore baseline`, then `./lab vm wait` | ~3 min |
 
-Each scenario declares its level in `scenario.yaml`; `./lab start` picks it.
+Faults that would need a hypervisor are done in the guest:
+- **Partition**: nft drops cluster peers but keeps ssh from the desktop range.
+- **Kubelet hang**: SIGSTOP.
+- **Slow node**: CPUQuota on `kubepods.slice`.
+- **Flaky link**: tc netem.
+- **Internet loss**: nft drop on the NAT NIC.
+- **Reboot-surfacing faults**: swap, modules, fstab.
+- **Clock skew**: `date -s` with chrony stopped.
+- **Expired certs**: short-lived kubeadm certs.
 
-### 2.6 Scenario layout (same idea as the other labs)
-```
-scenarios/P08-oomkilled/
-  scenario.yaml     id, title, level (1-3), domain, reset: namespace|cluster, needs: [metrics, gateway...]
-  ticket.md         symptoms + **Test** line
-  hints.md          3 progressive hints
-  manifests/        kustomize base deployed by setup (copied to ~/workspace in the VM for you to edit)
-  .lab/setup.sh     kubectl apply + fault injection (kubectl / docker exec into nodes / VM)
-  .lab/verify.sh    checks: rollout status, endpoints, in-cluster curl, events, RBAC can-i...
-  .lab/solve.sh     reference fix (used by selftest)
-  .lab/solution.md  root cause, diagnosis commands, fix, interview notes
-```
-Scripts run on the host and execute inside the VM over SSH (`kx` = kubectl in VM, `nx <node>` =
-shell in a kind node). Nothing from setup is left inside the cluster for you to find.
+## 3. GitOps and secrets stack (in the golden baseline)
 
-### 2.7 The lab app
-One small image `registry:5000/labapp` (stdlib Python, like the webapp in swarm-lab) with
-behaviour switches that look like normal settings: crash on missing env, slow start, memory
-leak, CPU burn, log-to-file, readiness/liveness endpoints, DB/redis dependency, big responses,
-SIGTERM handling. Plus `netshoot`, `busybox`, `nginx`, `redis`, `postgres`, `curl` images.
+- **Gitea** on gw hosts `lab/gitops` (`apps/`, `projects/`, `charts/`, `envs/{dev,prod}`, `secrets/`).
+  - Tag `baseline` is the reset point.
+  - The student works in `workspace/gitops` and pushes fixes.
+- **Helm charts**:
+  - `charts/labapp`: Deployment, Service, Ingress/HTTPRoute, ConfigMap, SA, HPA, PDB, NetworkPolicy toggles;
+    secret from an existing Secret, a SealedSecret or an ExternalSecret.
+  - `charts/shop`: an umbrella chart (frontend, api, redis, postgres; vendored subcharts).
+- **Argo CD** manages only lab apps. Addons stay under `./lab`/Helm, so self-heal never fights scenario faults.
+- **Sealed Secrets** in kube-system. The key is backed up to `.state/` for the DR scenarios.
+- **ESO + OpenBao** (MPL fork of Vault):
+  - OpenBao: TLS from the lab CA, a 1-of-1 unseal key in `.state` (`./lab` unseals after boot), kubernetes auth
+    with one role per namespace, kv-v2;
+  - stores use `caProvider`.
+- **SOPS + age** on the desktop: a learn lab + 2 incidents. Argo CD CMP/KSOPS is a wave-3 candidate.
 
-### 2.8 Budgets on this machine
+## 4. Framework
 
-| Resource | Budget | Notes |
+The `ansible-lab` skeleton: list, start, ticket, hint, verify, diff, solution, solve, reset, selftest,
+interview, status.
+
+| Area | Commands / helpers |
+|---|---|
+| `./lab vm` (built) | `check`, `kit`, `seedtest`, `wait`, `status`; `./lab node <n>` |
+| `./lab vm` (Phase 1) | `provision` |
+| `./lab cluster` (Phase 1) | `build`, `golden`, `reset`, `rebuild`, `doctor` |
+| Other commands | `./lab env` (PATH = `cache/bin`, KUBECONFIG), `./lab ui`, `./lab chaos`, `./lab exam` |
+| Scenario helpers | `kx` (local kubectl), `nx <node> '<cmd>'` (root on a node), `nssh`, `gx` (Gitea), `bx` (bao), `fault_partition`, `fault_clear`, `wait_rollout`, `incluster_curl`, `can_i`, `argo_status`, `curl_matrix` |
+
+Scenario layout:
+- files: `scenario.yaml`, `ticket.md` (**Test** line), `hints.md` (3 hints), `manifests/`,
+  hidden `.lab/{setup,verify,solve}.sh` + `solution.md`;
+- `scenario.yaml` adds `reset: ns|node|cluster|rebuild`, `version`, `nodes`.
+
+## 5. Content
+
+| Domain | IDs | Notes |
 |---|---|---|
-| CPU | VM 6 vCPU (host keeps 2) | QEMU capped with a user systemd scope |
-| RAM | VM 10 GiB (cluster ~4-5 GiB used) | host keeps ~9 GiB |
-| Disk | ~15 GB total | cloud image 0.6 + golden ~9 + overlay 2-5 + image cache ~2 (optional). **Only 18 GB free today** |
-| Network | ~4-5 GB once | Ubuntu image, apt, binaries, container images (Docker Hub, quay.io, registry.k8s.io, ghcr.io) |
+| P Pods & containers | P01-P16 | |
+| C Configuration | C01-C08 | |
+| S Scheduling | S01-S14 | |
+| R Resources & autoscaling | R01-R10 | |
+| W Workload controllers | W01-W12 | |
+| N Services & DNS | N01-N14 | |
+| G Ingress & Gateway API | G01-G08 | |
+| X NetworkPolicy & CNI | X01-X10 | +X09 default-deny blocks DNS and ESO→OpenBao, +X10 Argo CD egress |
+| V Storage | V01-V10 | |
+| A Security | A01-A13 | +A12 API secret read Forbidden, +A13 audit "who read the secret" |
+| K Control plane | K01-K17 | +K13 kubeadm upgrade (was O12), haproxy LB, w4 join, EncryptionConfiguration, SAN |
+| L Nodes & runtime | L01-L18 | +partition/StatefulSet, tolerationSeconds, slow node, swap, `br_netfilter`, clock, `/var` full, conntrack |
+| O Cluster operations | O01-O11 | |
+| Q Observability | Q01-Q05 | |
+| **D Delivery (Helm & Argo CD)** | D01-D12 | Values typo, drift, bad auto-sync, AppProject deny, repo creds, HPA OutOfSync, immutable selector, rollback vs self-heal, hook stuck, valueFiles order, app-of-apps, prune deleted a PVC |
+| **Y Secrets** | Y01-Y10 | SealedSecret scope, lost sealing key, ESO path / role / CA, OpenBao sealed, rotation vs env, ownership fight, SOPS updatekeys, SOPS plaintext leak |
+| B Boss fights | B01-B07 | +B07 GitOps DR |
+| **T Learn track** | T01-T16 | Lab tour, kubeadm anatomy, join w4, packet path, storage, MetalLB/Gateway, RBAC/CSR, etcd backup, upgrade, Helm, Argo CD, Sealed Secrets, ESO+OpenBao, SOPS, NetworkPolicy for GitOps, hardening |
 
-### 2.9 Extras
-* `./lab interview [--minutes 45] [--count 3] [--level 2]` - random tickets, timer, score, debrief
-* `./lab exam` - CKA-style: 15 tasks, 2 h, weighted score, no hints
-* `./lab selftest <id|domain|all>` - every scenario must FAIL after setup and PASS after the reference fix
-* `./lab chaos <fault>` - ad-hoc faults on a healthy cluster (kill kubelet, partition a node, delay
-  CoreDNS, fill a node disk...) for free-form practice
+~195 incidents + 16 learn labs. The research report's 8 scenarios are D01, D02, D03, D04, Y01, Y03, A12 and
+X09, all in wave 1.
 
-## 3. Scenario catalog (summary)
+## 6. Build plan
 
-155 scenarios in 15 domains - full table with emulation + verification in [docs/CATALOG.md](docs/CATALOG.md).
-
-| Domain | IDs | # | Examples (symptoms) |
-|---|---|---|---|
-| P - Pods & containers | P01-P16 | 16 | ImagePullBackOff (typo, private registry, wrong arch), CrashLoopBackOff, OOMKilled, probe loops, stuck Terminating, Job + sidecar never finishes |
-| C - Configuration | C01-C08 | 8 | ConfigMap change not picked up, subPath never updates, double-base64 secret, mount hides image files |
-| S - Scheduling | S01-S14 | 14 | Pending: resources, nodeSelector, taints, anti-affinity, topology spread, cordon, schedulerName typo, nodeName |
-| R - Resources & autoscaling | R01-R10 | 10 | HPA `<unknown>`, CPU throttling, QoS evictions, LimitRange rejects, PID limit, DiskPressure |
-| W - Workload controllers | W01-W12 | 12 | rollout stuck, selector immutable, StatefulSet ordinal stuck, CronJob suspended, PDB blocks drain |
-| N - Services & DNS | N01-N14 | 14 | no endpoints, targetPort, named ports, externalTrafficPolicy, CoreDNS loop, ndots, cross-node VXLAN blocked |
-| G - Ingress & Gateway API | G01-G08 | 8 | wrong ingressClass, 503 no endpoints, TLS secret mismatch, HTTPRoute not attached, missing ReferenceGrant |
-| X - NetworkPolicy & CNI | X01-X08 | 8 | default-deny kills DNS, port semantics, AND vs OR selectors, calico-node down, IP pool exhausted |
-| V - Storage | V01-V10 | 10 | PVC Pending, Released PV, node-affinity conflict, fsGroup, immutable volumeClaimTemplates, pvc-protection |
-| A - Security | A01-A11 | 11 | RBAC Forbidden, pods/exec, Pod Security Admission, runAsNonRoot, webhook down, user certs via CSR |
-| K - Control plane | K01-K12 | 12 | apiserver manifest typos, scheduler/controller-manager down, etcd down, etcd restore, expired certs, etcd NOSPACE |
-| L - Nodes & runtime | L01-L10 | 10 | kubelet stopped, containerd down, cgroup driver mismatch, CNI config missing, wrong node-ip, maxPods |
-| O - Cluster operations | O01-O12 | 12 | namespace stuck Terminating, finalizers, removed APIs, Helm pending-upgrade, drain, Kustomize overlay, audit log |
-| Q - Observability | Q01-Q05 | 5 | `kubectl top` broken, logs to file, restart forensics, noisy neighbour |
-| B - Boss fights | B01-B06 | 6 | 3-4 chained faults: Black Friday outage, control-plane meltdown, namespace onboarding, full DR |
-
-Difficulty: level 1 (single obvious layer, 5-10 min), level 2 (needs the right tool/concept,
-10-20 min), level 3 (multi-layer or deep internals, 20-40 min). Roughly 40 / 70 / 45.
-
-## 4. Build plan
-
-| Phase | Deliverable | Gate (must be true before continuing) |
+| Phase | Deliverable | Gate |
 |---|---|---|
-| **0. Spike** | Boot one VM with cloud-init over HTTP; SSH; run a 1-node kind cluster inside; watch the host journal | host stays healthy for 30 min under load; VM boot < 2 min; nested KVM performance acceptable |
-| **1. Golden VM** | Packages, tools, registries, all images preloaded; baseline 4-node cluster + addons; `golden.qcow2` | full cluster from golden in < 3 min, offline |
-| **2. Framework** | `./lab` CLI: vm up/down/reset, start/verify/hint/solution/solve/selftest, interview, chaos; helpers (`kx`, `nx`, `wait_rollout`, `incluster_curl`, `can_i`) | 3 pilot scenarios (one per reset level) pass selftest |
-| **3. Wave 1** (~50) | Core interview set: P, S, N, V, A basics + K01-K04 + L01-L04 | selftest green |
-| **4. Wave 2** (~60) | C, R, W, G, X, O, rest of K/L | selftest green |
-| **5. Wave 3** (~45) | level-3 + boss fights + `interview` / `exam` modes | selftest green; full run < 2.5 h |
-| **6. Docs** | README, CATALOG (final), INTERVIEW-QUESTIONS, "build your own scenario" | - |
+| **0 Kit + spike** | Kit, seed, `./lab vm kit/seedtest/wait/status`; you run `k8slab.bat create gw cp1` | Correct hostname + IP; SSH from the desktop; each VM has its own diff disk over one base; kit `snapshot`/`restore` work; 30-min soak with no VirtualBox halt; NEM status known |
+| **1 Fleet + cluster** | All 5 VMs, provision, 1.36 → 1.37, addons, `doctor`, `golden` | Doctor green. Broken apiserver, etcd and kubelet all come back via `cluster reset` in ≤3 min. Doctor green with NAT egress dropped. 2-h soak within budget |
+| **2 GitOps + secrets** | Gitea, charts, Argo CD, Sealed Secrets, ESO + OpenBao | labapp Synced/Healthy with 1 SealedSecret + 1 ExternalSecret; survives `cluster reset` |
+| **3 Framework** | CLI, helpers, reset ladder, 4 pilots (ns/node/cluster/GitOps) | Pilots pass selftest twice in a row |
+| **4 Learn** | T01-T16 | selftest green |
+| **5 Wave 1** (~60) | P/S/N/V/A basics, K01-K04, L01-L06, L11-L14, the 8 research scenarios | selftest green |
+| **6 Wave 2** (~75) | C, R, W, G, X, O, rest of K/L/D/Y | selftest green |
+| **7 Wave 3** (~45) | Level 3, B01-B07, interview/exam/chaos | Full selftest within a night |
+| **8 Docs** | README, CATALOG final, FAULTS.md, INTERVIEW-QUESTIONS, root README | - |
 
-Each wave ends with `./lab selftest <wave>` (broken -> FAIL, reference fix -> PASS) and a host
-health check (journal still writing, load normal).
+## 7. Budgets
 
-## 5. Risks & mitigations
+| Resource | Budget |
+|---|---|
+| RAM | 19 GB of the ~32 GB free (+2 GB with w4) |
+| vCPU | 9 + desktop 8 = 17 on 16 threads. Mild overcommit; the soak decides whether the desktop drops to 6 |
+| Windows disk | ~25 GB (base ~1.5, diffs ~3-4 each, gw data ~3); `check` warns below 35 GB free |
+| Desktop disk | ≤1.5 GB of the 12 GB free (CLIs, charts, golden ~0.3 GB) |
+| Downloads | ~5 GB once, fetched by gw and shared with the nodes |
+
+## 8. Risks
 
 | Risk | Mitigation |
 |---|---|
-| Nested KVM slow / unstable | Phase 0 gate; fall back to fewer workers (1 cp + 2) |
-| Disk space (18 GB free) | thin qcow2, single golden image, optional image cache, `./lab vm compact`; ask to free space first |
-| Flaky internet during the one-time build | retries per download, prefer quay.io/registry.k8s.io/ghcr.io mirrors, resumable cache in `cache/` |
-| Clock-change scenarios (cert expiry) | VM-only, always followed by a VM-level reset |
-| Version drift (Kubernetes, Calico, Traefik) | pin every version in `versions.env`; `./lab selftest all` after bumps |
-| ingress-nginx retirement (announced Nov 2025, best-effort maintenance until Mar 2026) | use Traefik (supports both Ingress and Gateway API); Gateway API is in the CKA curriculum |
-| Scenario relies on timing (HPA, evictions) | generous `check_eventually` windows, deterministic load generators |
+| Multiattach/snapshot semantics | Phase 0 gate; fallback: a full disk clone per VM (+~3 GB each) |
+| etcd-restore reset leaves stale state | `doctor` after each reset; cluster-level scenarios selftested twice; fallback `rebuild` |
+| The `.bat` can't be tested on this Linux desktop | Kept plain and identical in logic to the shellchecked `.sh` twin; `check` first; Phase 0 runs it for real |
+| VirtualBox on the Windows hypervisor (NEM, "turtle") | `check` warns; turning off Hyper-V/VBS is your call |
+| CPU overcommit | Soak gates; desktop to 6 vCPU |
+| Upstream drift | Everything pinned in `versions.env`; `./lab selftest all` after bumps |
 
 ---
 
-## 6. Phase 0 result (2026-11-04) - nested virtualization is NOT viable here
+## 9. History and phase results
 
-**What happened**: `./lab vm up` started QEMU with `-enable-kvm` at 09:23. VirtualBox halted with an
-error at once: the QEMU serial console stayed empty (the guest never booted), a key file written
-seconds earlier was never flushed (0 bytes), the host journal ends at 09:21:52.
+### Phase 0 v1 (2026-11-04): nested virtualization is NOT viable here
+- `qemu -enable-kvm` inside this desktop VM halted VirtualBox at once.
+- `lscpu` said "KVM" only because VirtualBox exposes a KVM paravirt interface; the machine is a VirtualBox 7.0
+  guest, and KVM-in-VirtualBox means nested AMD-V.
+- The two earlier freezes ended the same way: the journal stops with no shutdown record.
+- Options considered: kind in this VM, a sibling VM running kind, cluster outside VirtualBox, k3s.
 
-**What we got wrong**: `lscpu` reports `Hypervisor vendor: KVM` because VirtualBox (7.0.18 here)
-exposes a KVM *paravirtualization interface*. The machine is a **VirtualBox VM**, and running a
-KVM guest inside it means VirtualBox **nested AMD-V** - fragile, and here fatal.
+Settled on 2026-11-08 by the v2 decisions above.
 
-**Consequence**: options B (kind inside a KVM VM) and C (kubeadm on KVM VMs) are off the table
-*on this machine*. `./lab vm up` is disabled (needs `LAB_ALLOW_NESTED_KVM=yes`).
-
-**Re-reading the earlier "freezes"**: all three ended the same way - the guest journal stops with no
-shutdown record. Two coincided with starting a privileged / disk-throttled container, one with
-nested KVM. They may all be VirtualBox halts; the VirtualBox log (`VBox.log`, "Guru Meditation")
-would tell us the exact cause.
-
-### Replan options
-
-| | Option | Isolation | Coverage of the 155 scenarios | Risk on this machine |
-|---|---|---|---|---|
-| R1 | **Harden VirtualBox, then kind directly in this VM** (nested AMD-V off, paravirt "Default", 3D acceleration off; staged spike with the health tripwire: 1 node -> 4 nodes) | container-level (kind nodes are privileged) | ~150 (all but VM-clock and kubeadm-upgrade items) | medium: earlier halts coincided with privileged containers - the spike decides |
-| R2 | **Cluster outside VirtualBox on the physical host** (Windows: WSL2 + Docker/kind or Hyper-V VM; macOS: Colima/OrbStack; Linux: KVM VM as designed); `./lab` drives it over SSH | full | 155 (+ kubeadm track) | none for this VM |
-| R3 | **Remote Linux box** (cloud VM / spare server with KVM): the original kind-in-VM design unchanged, `./lab` over SSH | full | 155 (+ kubeadm track) | none; costs money / needs internet |
-| R4 | **k3s single node natively in this VM** (no containers-as-nodes, no nested virt; you run the installer with sudo) | none (it *is* this VM) | ~105: no multi-node, no kubeadm static-pod control plane (K/L domains mostly lost) | low-medium; modifies this VM's networking (uninstall script available) |
-
-**Recommendation**: first read the `VBox.log` of the crashed run. If the halt is clearly nested-SVM
-related -> **R1** (disable nested virtualization in VirtualBox, it isn't needed for kind) with a
-cautious spike. If the physical host can run containers or VMs itself -> **R2** is the safest and
-fastest long-term home for a 4-node lab.
-
-### Decision after Phase 0 (2026-11-04)
-User picked **R1 (hardened VirtualBox + kind)** and offered to create **another VM for SSH access**.
-Combined into **R1b: a sibling VirtualBox VM `k8slab`** (Ubuntu Server 24.04, 6 vCPU / 12 GB / 60 GB,
-nested AMD-V off, host-only network 192.168.56.0/24) running Docker + kind; the desktop VM keeps
-`./lab` and drives it over SSH. Crash isolation without nested virtualization; VirtualBox snapshots
-replace the qcow2 golden image. Setup steps: [docs/LAB-VM-SETUP.md](docs/LAB-VM-SETUP.md).
-Next: spike = provision over SSH -> 1-node kind + tripwire -> 4 nodes -> 30-min soak -> snapshot.
+### Phase 0 v2 (2026-11-08): kit built, seed verified
+- `infra/vbox/` written:
+  - `nodes.csv`;
+  - `k8slab.sh` (shellcheck clean, bash 3.2 compatible for macOS);
+  - `k8slab.bat` (CRLF, same logic; not executable here, so first real run is on Windows);
+  - `README.md`.
+- `tools/mkseed.py` + `infra/cloud-init/` written; pycdlib 1.22.0 is imported from its wheel.
+- **Seed verified**: release 20261017 booted under QEMU/TCG (software emulation, no `/dev/kvm`) as `k8s-cp1`.
+  - About 3 min to cloud-init `done`.
+  - SSH as `lab` with the desktop key, passwordless sudo.
+  - Hostname and `/etc/hosts` set; 192.168.56.21/24 on the host-only NIC.
+  - NAT NIC on DHCP with the default route.
+  - The interface names were `ens3`/`ens8` (MAC matching made that irrelevant).
+- kind tooling removed: `infra/kind`, `provision.sh`, `lib/remote.sh`, the kind binary.
+- **Next (you)**:
+  1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
+  2. `./lab vm kit`.
+  3. On Windows: `k8slab.bat check`, then `k8slab.bat create gw cp1`.
+  4. `./lab vm wait gw cp1`.

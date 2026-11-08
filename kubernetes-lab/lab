@@ -1,50 +1,53 @@
 #!/usr/bin/env bash
-# kubernetes-lab CLI. The cluster lives in a sibling VirtualBox VM ("lab VM", docs/LAB-VM-SETUP.md).
+# kubernetes-lab CLI. The cluster runs in sibling VirtualBox VMs (k8s-gw, k8s-cp1, k8s-w1..3) created
+# on the physical host by the kit in infra/vbox; ./lab reaches them only over SSH. See PLAN.md.
 set -euo pipefail
 LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$LAB_DIR/lib/common.sh"; source "$LAB_DIR/versions.env"; source "$LAB_DIR/lib/remote.sh"
+# shellcheck source=lib/common.sh
+source "$LAB_DIR/lib/common.sh"
+# shellcheck source=lib/vm.sh
+source "$LAB_DIR/lib/vm.sh"
 
 usage() {
-  cat <<U
-./lab vm check            is the lab VM reachable / configured as documented?
-./lab vm provision        install Docker, kind, kubectl on the lab VM (idempotent)
-./lab spike up|soak|down  Phase 0: 1-node test cluster, then the 4-node cluster + soak
-./lab sh                  shell on the lab VM (kubectl, kind, docker)
-./lab health [n]          desktop VM health log
-U
-}
+  cat <<EOF
+${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0: the VMs)
 
-spike() {
-  case "${1:-}" in
-    up)
-      health_start
-      info "1-node spike cluster"
-      vx "kind get clusters | grep -qx spike || kind create cluster --config - --image '$KIND_NODE_IMAGE' --wait 180s" \
-        < "$LAB_DIR/infra/kind/spike-1node.yaml"
-      vx 'kubectl --context kind-spike get nodes -o wide && kubectl --context kind-spike -n kube-system get pods'
-      ;;
-    soak)
-      health_start
-      vx 'kind delete cluster --name spike >/dev/null 2>&1 || true'
-      info "4-node lab cluster"
-      vx "kind get clusters | grep -qx lab || kind create cluster --config - --image '$KIND_NODE_IMAGE' --wait 300s" \
-        < "$LAB_DIR/infra/kind/lab-4node.yaml"
-      vx 'kubectl get nodes -o wide'
-      ;;
-    down) vx 'for c in $(kind get clusters); do kind delete cluster --name "$c"; done'; health_stop ;;
-    *) die "usage: ./lab spike up|soak|down" ;;
-  esac
+  ./lab vm check              this desktop VM: host-only address, SSH key, kit, shared folder
+  ./lab vm kit                build the VirtualBox kit (k8slab.bat/.sh, nodes.csv, seed.iso) and
+                              copy it to the shared folder - then on Windows: k8slab.bat create
+  ./lab vm seedtest [node]    boot the seed under QEMU software emulation and check it (~5-10 min)
+  ./lab vm wait [nodes]       wait until the VMs answer SSH with the right hostname and IP
+  ./lab vm status             uptime, memory and disk of every node
+  ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
+  ./lab health [start|stop|N] desktop health log while the VMs work
+
+Nodes: $(node_rows | awk '{printf "%s(%s) ", $1, $4}')
+Snapshots, start/stop and deleting VMs happen on the VirtualBox host: k8slab.bat status|stop|snapshot|restore
+EOF
 }
 
 case "${1:-help}" in
   vm)
-    case "${2:-check}" in
+    sub=${2:-check}; shift 2 || shift $#
+    case $sub in
       check) vm_check ;;
-      provision) vm_check || die "fix the items above first (docs/LAB-VM-SETUP.md)"; vm_provision ;;
-      *) die "usage: ./lab vm check|provision" ;;
+      kit) vm_kit ;;
+      seedtest) vm_seedtest "$@" ;;
+      wait) vm_wait "$@" ;;
+      status) vm_status ;;
+      *) die "usage: ./lab vm check|kit|seedtest|wait|status" ;;
     esac ;;
-  spike) shift; spike "$@" ;;
-  sh) shift; exec ssh -t $(ssh_opts) "$LAB_VM_USER@$LAB_VM_HOST" "$@" ;;
-  health) tail -n "${2:-20}" "$STATE_DIR/health.log" ;;
-  *) usage ;;
+  node)
+    [ $# -ge 2 ] || die "usage: ./lab node <node> [cmd...]"
+    n=$2; shift 2; ip=$(node_ip "$n"); [ -n "$ip" ] || die "unknown node: $n"
+    # shellcheck disable=SC2046
+    if [ $# -eq 0 ]; then exec ssh -t $(ssh_opts) "lab@$ip"; else nssh "$n" "$@"; fi ;;
+  health)
+    case "${2:-20}" in
+      start) health_start; ok "health log: $(rel "$STATE_DIR/health.log")" ;;
+      stop) health_stop ;;
+      *) tail -n "${2:-20}" "$STATE_DIR/health.log" ;;
+    esac ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
 esac
