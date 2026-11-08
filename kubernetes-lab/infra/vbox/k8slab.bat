@@ -195,9 +195,14 @@ exit /b 0
 for /f "tokens=*" %%v in ('VBoxManage.exe --version') do set "VBVER=%%v"
 echo VirtualBox %VBVER%
 set "VBMAJ="
-for /f "tokens=1 delims=." %%m in ("%VBVER%") do set "VBMAJ=%%m"
+set "VBMIN=0"
+for /f "tokens=1,2 delims=." %%m in ("%VBVER%") do (set "VBMAJ=%%m" & set "VBMIN=%%n")
 if not defined VBMAJ (echo ERROR: "VBoxManage.exe --version" gave no version & exit /b 1)
 if %VBMAJ% LSS 7 (echo ERROR: VirtualBox 7.0 or newer is required & exit /b 1)
+rem VirtualBox 7.1+ requires the platform architecture on createvm
+set "ARCH="
+if %VBMAJ% GTR 7 set "ARCH=--platform-architecture x86"
+if %VBMAJ% EQU 7 if %VBMIN% GEQ 1 set "ARCH=--platform-architecture x86"
 call :find_hostonly
 if not defined HOSTONLY (
   echo ERROR: no host-only adapter with IP %HOSTONLY_IP%.
@@ -253,8 +258,10 @@ VBoxManage.exe clonemedium disk "%IMG%" "%VDI%" --format VDI >nul || exit /b 1
 VBoxManage.exe closemedium disk "%IMG%" >nul 2>&1
 VBoxManage.exe modifymedium disk "%VDI%" --resize %DISK_MB% >nul || exit /b 1
 :base_type
-VBoxManage.exe showmediuminfo disk "%VDI%" | findstr /r /c:"^Type: *multiattach" >nul
-if errorlevel 1 (VBoxManage.exe modifymedium disk "%VDI%" --type multiattach >nul || exit /b 1)
+rem A new disk sits in VirtualBox's global media registry, where it can't be made multiattach. Unregister it
+rem (the file stays): the first VM's "storageattach --mtype multiattach" re-opens it and sets the type.
+VBoxManage.exe showmediuminfo disk "%VDI%" 2>nul | findstr /r /c:"^Type: *multiattach" >nul
+if errorlevel 1 VBoxManage.exe closemedium disk "%VDI%" >nul 2>&1
 fc /b "%KIT%\seed.iso" "%SEED%" >nul 2>&1
 if errorlevel 1 (copy /y "%KIT%\seed.iso" "%SEED%" >nul || echo WARNING: could not update "%SEED%" - is it in use?)
 exit /b 0
@@ -264,15 +271,19 @@ rem :create_vm name cpus mem ip mac1 mac2 role
 VBoxManage.exe showvminfo "%~1" >nul 2>&1
 if not errorlevel 1 (echo    %~1: exists, skipped & exit /b 0)
 echo ==^> %~1: %~2 vCPU, %~3 MB, %~4
-VBoxManage.exe createvm --name "%~1" --ostype Ubuntu_64 --groups "%VM_GROUP%" --register >nul || exit /b 1
-VBoxManage.exe modifyvm "%~1" --cpus %~2 --memory %~3 --vram 16 --graphicscontroller vmsvga --firmware bios --ioapic on --rtc-use-utc on --nested-hw-virt off --paravirt-provider default --boot1 disk --boot2 dvd --boot3 none --boot4 none --audio-enabled off --usb-ohci off --usb-ehci off --usb-xhci off --clipboard-mode disabled --drag-and-drop disabled || exit /b 1
-VBoxManage.exe modifyvm "%~1" --nic1 nat --nic-type1 82540EM --mac-address1 %~5 --nic2 hostonly --nic-type2 82540EM --host-only-adapter2 "%HOSTONLY%" --mac-address2 %~6 || exit /b 1
-VBoxManage.exe modifyvm "%~1" --uart1 0x3F8 4 --uart-mode1 file "%K8SLAB_HOME%\logs\%~1-console.log" || exit /b 1
-VBoxManage.exe storagectl "%~1" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on || exit /b 1
-VBoxManage.exe storageattach "%~1" --storagectl SATA --port 0 --device 0 --type hdd --medium "%VDI%" || exit /b 1
-VBoxManage.exe storageattach "%~1" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "%SEED%" || exit /b 1
-VBoxManage.exe startvm "%~1" --type headless >nul || exit /b 1
+VBoxManage.exe createvm --name "%~1" %ARCH% --ostype Ubuntu_64 --groups "%VM_GROUP%" --register >nul || exit /b 1
+VBoxManage.exe modifyvm "%~1" --cpus %~2 --memory %~3 --vram 16 --graphicscontroller vmsvga --firmware bios --ioapic on --rtc-use-utc on --nested-hw-virt off --paravirt-provider default --boot1 disk --boot2 dvd --boot3 none --boot4 none --audio-enabled off --usb-ohci off --usb-ehci off --usb-xhci off --clipboard-mode disabled --drag-and-drop disabled || goto create_fail
+VBoxManage.exe modifyvm "%~1" --nic1 nat --nic-type1 82540EM --mac-address1 %~5 --nic2 hostonly --nic-type2 82540EM --host-only-adapter2 "%HOSTONLY%" --mac-address2 %~6 || goto create_fail
+VBoxManage.exe modifyvm "%~1" --uart1 0x3F8 4 --uart-mode1 file "%K8SLAB_HOME%\logs\%~1-console.log" || goto create_fail
+VBoxManage.exe storagectl "%~1" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on || goto create_fail
+VBoxManage.exe storageattach "%~1" --storagectl SATA --port 0 --device 0 --type hdd --medium "%VDI%" --mtype multiattach || goto create_fail
+VBoxManage.exe storageattach "%~1" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "%SEED%" || goto create_fail
+VBoxManage.exe startvm "%~1" --type headless >nul || goto create_fail
 exit /b 0
+:create_fail
+echo ERROR: creating %~1 failed - removing the half-made VM so "create" can run again
+VBoxManage.exe unregistervm "%~1" --delete >nul 2>&1
+exit /b 1
 
 :start_vm
 call :state %1

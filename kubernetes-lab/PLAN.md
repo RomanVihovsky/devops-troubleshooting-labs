@@ -51,7 +51,7 @@ Companion documents:
 ### 2.1 Shape
 
 ```
-Windows 11 + VirtualBox 7.0          you run once:  k8slab.bat create   (Linux/macOS: ./k8slab.sh create)
+Windows 11 + VirtualBox 7.2          you run once:  k8slab.bat create   (Linux/macOS: ./k8slab.sh create)
 │  host-only 192.168.56.0/24 (host .1)
 ├─ desktop VM (Ubuntu)   ./lab, kubectl, helm, argocd, kubeseal, sops+age, bao, k9s, stern
 │     ssh lab@192.168.56.x => provisioning, scenarios, resets;  kubectl => https://192.168.56.20:6443
@@ -255,6 +255,12 @@ Settled on 2026-11-08 by the v2 decisions above.
   - NAT NIC on DHCP with the default route.
   - The interface names were `ens3`/`ens8` (MAC matching made that irrelevant).
 - kind tooling removed: `infra/kind`, `provision.sh`, `lib/remote.sh`, the kind binary.
+- **First Windows run (VirtualBox 7.2.20)**: `check` passed (host-only adapter found, 254 GB free).
+  `create` downloaded and verified the image, then failed. VirtualBox refuses `--type multiattach` on a disk
+  in its global media registry, which is where `clonemedium` puts it. Fixes in both scripts:
+  - `closemedium` the base, then let the first `storageattach --mtype multiattach` set the type;
+  - 7.1+ `createvm` requires `--platform-architecture x86`;
+  - a failed create now deletes the half-made VM.
 - **Next (you)**:
   1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
   2. `./lab vm kit`.

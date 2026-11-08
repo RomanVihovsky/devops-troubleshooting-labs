@@ -71,6 +71,8 @@ cmd_check() {
   v=$(vbm --version) || die "VBoxManage not found (set VBOXMANAGE=/path/to/VBoxManage)"
   echo "VirtualBox $v"
   [ "${v%%.*}" -ge 7 ] || die "VirtualBox 7.0 or newer is required"
+  ARCH=()                                   # VirtualBox 7.1+ requires the platform architecture on createvm
+  if [ "${v%%.*}" -gt 7 ] || { v=${v#*.}; [ "${v%%.*}" -ge 1 ]; }; then ARCH=(--platform-architecture x86); fi
   ho=$(hostonly_name)
   if [ -n "$ho" ]; then echo "host-only network: $ho ($HOSTONLY_IP)"
   elif [ "$(uname -s)" = Darwin ]; then
@@ -101,8 +103,11 @@ ensure_base() {
     vbm closemedium disk "$img" >/dev/null 2>&1 || true
     vbm modifymedium disk "$VDI" --resize "$DISK_MB" >/dev/null
   fi
-  vbm showmediuminfo disk "$VDI" | grep -Eq '^Type: +multiattach' \
-    || vbm modifymedium disk "$VDI" --type multiattach >/dev/null
+  # A new disk sits in VirtualBox's global media registry, where it can't be made multiattach. Unregister it
+  # (the file stays): the first VM's "storageattach --mtype multiattach" re-opens it and sets the type.
+  if ! { vbm showmediuminfo disk "$VDI" 2>/dev/null || true; } | grep -Eq '^Type: +multiattach'; then
+    vbm closemedium disk "$VDI" >/dev/null 2>&1 || true
+  fi
   if ! cmp -s "$KIT/seed.iso" "$SEED"; then cp "$KIT/seed.iso" "$SEED" || warn "could not update $SEED"; fi
 }
 
@@ -112,7 +117,14 @@ create_vm() {   # name cpus mem ip mac1 mac2 role
   if [ "$(uname -s)" = Darwin ]; then nic2=(--nic2 hostonlynet --host-only-net2 "$HOSTONLY")
   else nic2=(--nic2 hostonly --host-only-adapter2 "$HOSTONLY"); fi
   say "$n: $2 vCPU, $3 MB, $4"
-  vbm createvm --name "$n" --ostype Ubuntu_64 --groups "$VM_GROUP" --register >/dev/null
+  vbm createvm --name "$n" ${ARCH[@]+"${ARCH[@]}"} --ostype Ubuntu_64 --groups "$VM_GROUP" --register >/dev/null
+  if ! configure_vm "$@"; then
+    vbm unregistervm "$n" --delete >/dev/null 2>&1 || true
+    die "creating $n failed - removed the half-made VM, so create can run again"
+  fi
+}
+configure_vm() {   # same args as create_vm; every step must succeed (set -e is off in an if)
+  local n=$1
   vbm modifyvm "$n" --cpus "$2" --memory "$3" --vram 16 --graphicscontroller vmsvga \
     --firmware bios --ioapic on --rtc-use-utc on --nested-hw-virt off --paravirt-provider default \
     --boot1 disk --boot2 dvd --boot3 none --boot4 none \
@@ -120,11 +132,11 @@ create_vm() {   # name cpus mem ip mac1 mac2 role
     --clipboard-mode disabled --drag-and-drop disabled \
     --nic1 nat --nic-type1 82540EM --mac-address1 "$5" \
     "${nic2[@]}" --nic-type2 82540EM --mac-address2 "$6" \
-    --uart1 0x3F8 4 --uart-mode1 file "$K8SLAB_HOME/logs/$n-console.log"
-  vbm storagectl "$n" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on
-  vbm storageattach "$n" --storagectl SATA --port 0 --device 0 --type hdd --medium "$VDI"
-  vbm storageattach "$n" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "$SEED"
-  vbm startvm "$n" --type headless >/dev/null
+    --uart1 0x3F8 4 --uart-mode1 file "$K8SLAB_HOME/logs/$n-console.log" || return 1
+  vbm storagectl "$n" --name SATA --add sata --controller IntelAhci --portcount 2 --hostiocache on || return 1
+  vbm storageattach "$n" --storagectl SATA --port 0 --device 0 --type hdd --medium "$VDI" --mtype multiattach || return 1
+  vbm storageattach "$n" --storagectl SATA --port 1 --device 0 --type dvddrive --medium "$SEED" || return 1
+  vbm startvm "$n" --type headless >/dev/null || return 1
 }
 
 start_vm() {
