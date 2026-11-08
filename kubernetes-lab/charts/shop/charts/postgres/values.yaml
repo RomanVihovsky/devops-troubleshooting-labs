@@ -1,0 +1,46 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: registry.lab:5000/lab/postgres
+  tag: 16-alpine
+  pullPolicy: IfNotPresent
+
+auth:
+  username: app
+  database: app
+  existingSecret: ""                  # required: Secret holding the password
+  secretKey: postgres-password
+
+persistence:
+  enabled: true                       # volumeClaimTemplate "data"; false = emptyDir (data lost on restart)
+  storageClass: ""                    # "" = cluster default, "-" = storageClassName: ""
+  accessModes: [ReadWriteOnce]
+  size: 1Gi
+
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {memory: 256Mi}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 70                       # postgres in the alpine image
+  runAsGroup: 70
+  fsGroup: 70
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true        # /var/run/postgresql and /tmp are emptyDirs
+  capabilities: {drop: [ALL]}
+
+service:
+  type: ClusterIP
+  port: 5432
+
+enableServiceLinks: true
+terminationGracePeriodSeconds: 30
+podLabels: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

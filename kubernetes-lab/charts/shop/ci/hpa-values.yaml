@@ -1,0 +1,11 @@
+# autoscaled tiers with PDBs, file-mounted secrets on the api
+frontend:
+  autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 4}
+  podDisruptionBudget: {enabled: true}
+api:
+  autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 6, targetCPUUtilizationPercentage: 50}
+  podDisruptionBudget: {enabled: true}
+  app: {hashIterations: 200000}
+  secrets: {mountAsFiles: true}
+postgres:
+  persistence: {size: 2Gi}

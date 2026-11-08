@@ -1,0 +1,47 @@
+# HPA + kitchen sink: PVC, migration hook, subPath config file, kubernetes discovery,
+# egress lock-down, file logging + log-shipper sidecar, startup probe, preStop
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: 120}
+podDisruptionBudget:
+  enabled: true
+  minAvailable: null
+  maxUnavailable: 1
+persistence:
+  enabled: true
+  storageClass: "-"
+  annotations: {helm.sh/resource-policy: keep}
+migrations:
+  enabled: true
+config:
+  file: {enabled: true, subPath: true}
+app:
+  hashIterations: 1000000
+  cacheMB: 64
+  cacheWarmup: lazy
+  errorRate: 0.05
+  logFile: /var/log/labapp/app.log
+  peers: {discovery: kubernetes}
+  settings: {INDEXER_WORKERS: 1}
+networkPolicy:
+  enabled: true
+  ingress: {allowSameNamespace: false, ingressControllerNamespace: ""}
+  egress:
+    restrict: true
+    to:
+      - to: [{ipBlock: {cidr: 10.96.0.1/32}}]
+        ports: [{port: 443, protocol: TCP}]
+probes:
+  startup: {enabled: true}
+lifecycle:
+  preStop: {exec: {command: [sleep, "5"]}}
+sidecars:
+  - name: log-shipper
+    image: registry.lab:5000/lab/labapp:1.4
+    args: [ship-logs, /var/log/labapp/app.log]
+    securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+    volumeMounts: [{name: logs, mountPath: /var/log/labapp}]

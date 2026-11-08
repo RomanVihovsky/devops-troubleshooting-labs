@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres
+description: Minimal single-instance PostgreSQL StatefulSet for kubernetes-lab (vendored into shop)
+type: application
+version: 0.1.0
+appVersion: "16-alpine"

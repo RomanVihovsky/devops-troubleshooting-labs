@@ -1,0 +1,14 @@
+shop in namespace {{ .Release.Namespace }} (secret {{ .Values.secret.name }} from {{ .Values.secret.source }}):
+{{- if .Values.frontend.enabled }}
+  frontend  http://frontend.{{ .Release.Namespace }}.svc:8080/   -> api /items with the api-token
+{{- end }}
+{{- if .Values.api.enabled }}
+  api       http://api.{{ .Release.Namespace }}.svc:8080/items  (Bearer token required)
+{{- end }}
+{{- if .Values.redis.enabled }}
+  redis     redis.{{ .Release.Namespace }}.svc:6379
+{{- end }}
+{{- if .Values.postgres.enabled }}
+  postgres  postgres.{{ .Release.Namespace }}.svc:5432 (db {{ .Values.postgres.auth.database }})
+{{- end }}
+Check: kubectl -n {{ .Release.Namespace }} exec deploy/frontend -- labapp get http://127.0.0.1:8080/

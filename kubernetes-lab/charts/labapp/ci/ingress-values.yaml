@@ -1,0 +1,22 @@
+# Ingress (traefik) + TLS + NetworkPolicy + PDB, secret from an existing Secret
+ingress:
+  enabled: true
+  hosts:
+    - host: shop.lab
+      paths: [{path: /, pathType: Prefix}]
+  tls:
+    - secretName: shop-tls
+      hosts: [shop.lab]
+networkPolicy:
+  enabled: true
+podDisruptionBudget:
+  enabled: true
+app:
+  redis: {host: redis}
+  upstream: {url: "http://api:8080/items", required: true}
+secrets:
+  source: existingSecret
+  name: shop-secrets
+  env:
+    REDIS_PASSWORD: redis-password
+    UPSTREAM_TOKEN: api-token

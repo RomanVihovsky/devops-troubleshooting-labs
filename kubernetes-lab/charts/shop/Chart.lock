@@ -1,0 +1,15 @@
+dependencies:
+- name: labapp
+  repository: file://../labapp
+  version: 0.1.0
+- name: labapp
+  repository: file://../labapp
+  version: 0.1.0
+- name: redis
+  repository: ""
+  version: 0.1.0
+- name: postgres
+  repository: ""
+  version: 0.1.0
+digest: sha256:ff02f00a2ba06d193f28fb377fb60a6b3234cde120664c1943e8448f18303040
+generated: "2026-11-08T17:13:26.063506Z"

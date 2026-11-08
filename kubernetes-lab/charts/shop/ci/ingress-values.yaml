@@ -1,0 +1,10 @@
+# frontend on shop.lab through Traefik Ingress, api reachable only in-cluster
+frontend:
+  ingress:
+    enabled: true
+    tls: [{secretName: shop-tls, hosts: [shop.lab]}]
+  networkPolicy: {enabled: true}
+api:
+  networkPolicy:
+    enabled: true
+    ingress: {ingressControllerNamespace: ""}

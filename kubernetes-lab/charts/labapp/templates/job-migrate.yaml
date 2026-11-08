@@ -1,0 +1,61 @@
+{{- if .Values.migrations.enabled }}
+{{- $m := .Values.migrations }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $m.name | default (printf "%s-migrate" (include "labapp.fullname" .)) }}
+  labels:
+    {{- include "labapp.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: {{ $m.hook }}
+    helm.sh/hook-weight: {{ $m.hookWeight | quote }}
+    helm.sh/hook-delete-policy: {{ $m.deletePolicy }}
+spec:
+  backoffLimit: {{ $m.backoffLimit }}
+  activeDeadlineSeconds: {{ $m.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "labapp.name" . }}-migrate
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "labapp.serviceAccountName" . }}
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:{{ include "labapp.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml $m.command | nindent 12 }}
+          envFrom:
+            {{- include "labapp.envFrom" . | trim | nindent 12 }}
+          {{- with include "labapp.env" . | trim }}
+          env:
+            {{- . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.secrets.mountAsFiles (ne .Values.secrets.source "none") }}
+          volumeMounts:
+            - name: secrets
+              mountPath: {{ .Values.secrets.mountPath }}
+              readOnly: true
+          {{- end }}
+      {{- if and .Values.secrets.mountAsFiles (ne .Values.secrets.source "none") }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ include "labapp.secretName" . }}
+      {{- end }}
+{{- end }}

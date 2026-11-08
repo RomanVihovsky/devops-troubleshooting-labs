@@ -1,0 +1,10 @@
+{{ include "labapp.fullname" . }} ({{ .Values.image.repository }}:{{ include "labapp.imageTag" . }}) in namespace {{ .Release.Namespace }}.
+
+In-cluster:  http://{{ include "labapp.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/
+{{- if .Values.ingress.enabled }}
+Ingress:     {{ range .Values.ingress.hosts }}http://{{ .host }}/ {{ end }}(class {{ .Values.ingress.className }})
+{{- end }}
+{{- if .Values.httpRoute.enabled }}
+HTTPRoute:   {{ range .Values.httpRoute.hostnames }}http://{{ . }}/ {{ end }}
+{{- end }}
+Check:       kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "labapp.fullname" . }} -- labapp get http://127.0.0.1:{{ .Values.app.port }}/ready

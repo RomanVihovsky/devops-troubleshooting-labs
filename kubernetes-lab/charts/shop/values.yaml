@@ -1,0 +1,91 @@
+# shop umbrella. One Secret (secret.name) feeds every component; frontend and api are the labapp chart
+# (see charts/labapp/values.yaml for everything they accept).
+#
+#   browser -> frontend (/) --Bearer api-token--> api (/items) --> postgres (items), redis (view counter)
+
+secret:
+  name: shop-secrets                  # referenced by the subcharts below - rename them together
+  source: inline                      # inline | existingSecret | sealedSecret | externalSecret
+  inline:                             # demo values for a plain Secret (the GitOps track replaces these)
+    postgres-password: shop-demo-pg
+    redis-password: shop-demo-redis
+    api-token: shop-demo-token
+  sealedSecret:
+    encryptedData: {}                 # kubeseal output for the three keys above
+    scope: strict
+  externalSecret:
+    apiVersion: external-secrets.io/v1
+    storeRef:
+      kind: ClusterSecretStore
+      name: openbao
+    refreshInterval: 1h
+    remoteKey: shop                   # kv-v2 path in OpenBao
+    data:                             # Secret key -> property under remoteKey (or {key, property})
+      postgres-password: postgres_password
+      redis-password: redis_password
+      api-token: api_token
+    creationPolicy: Owner
+
+frontend:
+  enabled: true
+  fullnameOverride: frontend
+  component: frontend
+  app:
+    name: frontend
+    greeting: Welcome to the lab shop
+    upstream:
+      url: http://api:8080/items
+  secrets:
+    source: existingSecret
+    name: shop-secrets
+    env:
+      UPSTREAM_TOKEN: api-token
+  ingress:
+    hosts:
+      - host: shop.lab
+        paths: [{path: /, pathType: Prefix}]
+  httpRoute:
+    hostnames: [shop.lab]
+
+api:
+  enabled: true
+  fullnameOverride: api
+  component: api
+  app:
+    name: api
+    storage: postgres
+    autoMigrate: true
+    database:
+      url: postgres://shop@postgres:5432/shop     # password comes from DATABASE_PASSWORD
+    redis:
+      host: redis
+  secrets:
+    source: existingSecret
+    name: shop-secrets
+    env:
+      DATABASE_PASSWORD: postgres-password
+      REDIS_PASSWORD: redis-password
+      AUTH_TOKEN: api-token
+  ingress:
+    hosts:
+      - host: api.shop.lab
+        paths: [{path: /, pathType: Prefix}]
+  httpRoute:
+    hostnames: [api.shop.lab]
+
+redis:
+  enabled: true
+  fullnameOverride: redis
+  auth:
+    enabled: true
+    existingSecret: shop-secrets
+    secretKey: redis-password
+
+postgres:
+  enabled: true
+  fullnameOverride: postgres
+  auth:
+    username: shop
+    database: shop
+    existingSecret: shop-secrets
+    secretKey: postgres-password
