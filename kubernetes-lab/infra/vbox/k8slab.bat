@@ -213,7 +213,7 @@ echo host-only network: %HOSTONLY% ^(%HOSTONLY_IP%^)
 if not exist "%K8SLAB_HOME%" mkdir "%K8SLAB_HOME%"
 set "FREEGB="
 for /f %%g in ('powershell -NoProfile -Command "[int]((Get-Item -LiteralPath $env:K8SLAB_HOME).PSDrive.Free/1GB)"') do set "FREEGB=%%g"
-echo free disk at %K8SLAB_HOME%: %FREEGB% GB
+echo free disk at %K8SLAB_HOME%: %FREEGB% GB  ^(VMs go to %K8SLAB_HOME%\vms^)
 if defined FREEGB if %FREEGB% LSS 35 echo WARNING: less than 35 GB free - the 5 VMs need about 25 GB
 set "HV="
 for /f %%h in ('powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).HypervisorPresent"') do set "HV=%%h"
@@ -236,7 +236,7 @@ for /f "tokens=1,* delims=:" %%a in ('VBoxManage.exe list hostonlyifs') do (
 exit /b 0
 
 :ensure_base
-for %%d in (cache base logs) do if not exist "%K8SLAB_HOME%\%%d" mkdir "%K8SLAB_HOME%\%%d"
+for %%d in (cache base logs vms) do if not exist "%K8SLAB_HOME%\%%d" mkdir "%K8SLAB_HOME%\%%d"
 set "IMG=%K8SLAB_HOME%\cache\%IMAGE_FILE%"
 if exist "%VDI%" goto base_type
 if exist "%IMG%" goto base_verify
@@ -271,7 +271,8 @@ rem :create_vm name cpus mem ip mac1 mac2 role
 VBoxManage.exe showvminfo "%~1" >nul 2>&1
 if not errorlevel 1 (echo    %~1: exists, skipped & exit /b 0)
 echo ==^> %~1: %~2 vCPU, %~3 MB, %~4
-VBoxManage.exe createvm --name "%~1" %ARCH% --ostype Ubuntu_64 --groups "%VM_GROUP%" --register >nul || exit /b 1
+rem --basefolder: never VirtualBox's default machine folder, which may point somewhere this user can't write
+VBoxManage.exe createvm --name "%~1" %ARCH% --ostype Ubuntu_64 --groups "%VM_GROUP%" --basefolder "%K8SLAB_HOME%\vms" --register >nul || exit /b 1
 VBoxManage.exe modifyvm "%~1" --cpus %~2 --memory %~3 --vram 16 --graphicscontroller vmsvga --firmware bios --ioapic on --rtc-use-utc on --nested-hw-virt off --paravirt-provider default --boot1 disk --boot2 dvd --boot3 none --boot4 none --audio-enabled off --usb-ohci off --usb-ehci off --usb-xhci off --clipboard-mode disabled --drag-and-drop disabled || goto create_fail
 VBoxManage.exe modifyvm "%~1" --nic1 nat --nic-type1 82540EM --mac-address1 %~5 --nic2 hostonly --nic-type2 82540EM --host-only-adapter2 "%HOSTONLY%" --mac-address2 %~6 || goto create_fail
 VBoxManage.exe modifyvm "%~1" --uart1 0x3F8 4 --uart-mode1 file "%K8SLAB_HOME%\logs\%~1-console.log" || goto create_fail

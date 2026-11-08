@@ -39,8 +39,11 @@ What create does
 - Per VM: Ubuntu_64, CPUs/RAM from nodes.csv, nested VT-x/AMD-V off, NIC1 NAT (internet),
   NIC2 host-only with a fixed MAC (the VM finds its name and IP by that MAC), serial console
   logged to logs\<vm>-console.log, seed.iso as DVD (cloud-init: user "lab" + the desktop's SSH key).
-- VMs live in VirtualBox's default machine folder, group /k8slab. Set K8SLAB_HOME=D:\k8slab before
-  running the script to keep the image, base disk and logs elsewhere.
+- Everything lives under %USERPROFILE%\k8slab (K8SLAB_HOME): cache\ (image), base\ (base disk, seed),
+  vms\ (the VMs, group /k8slab in VirtualBox Manager), logs\ (serial consoles). VirtualBox's own default
+  machine folder is not used. Set K8SLAB_HOME=D:\k8slab before running the script to use another drive.
+- No admin rights needed: run it as the same Windows user that runs VirtualBox Manager, so the VMs
+  show up there.
 
 Snapshots
 ---------

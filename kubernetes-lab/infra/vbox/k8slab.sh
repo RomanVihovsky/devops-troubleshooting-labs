@@ -31,7 +31,7 @@ k8slab.sh - the kubernetes-lab node VMs (VirtualBox $VM_GROUP)
   restore <name> [nodes]     power off, restore the snapshot, start
   destroy [nodes]            power off and delete the VMs and their disks (asks first)
 nodes: names from nodes.csv (k8s-cp1 or just cp1). Default: all of them except role "spare".
-Files: $K8SLAB_HOME (override with K8SLAB_HOME=...)
+Files and VMs: $K8SLAB_HOME (override with K8SLAB_HOME=...)
 U
 }
 
@@ -80,7 +80,7 @@ cmd_check() {
   else die "no host-only adapter with IP $HOSTONLY_IP - create one (File > Tools > Network Manager), 192.168.56.1/24"; fi
   mkdir -p "$K8SLAB_HOME"
   free=$(df -Pk "$K8SLAB_HOME" | awk 'NR==2{print int($4/1048576)}')
-  echo "free disk at $K8SLAB_HOME: ${free} GB"
+  echo "free disk at $K8SLAB_HOME: ${free} GB (VMs go to $K8SLAB_HOME/vms)"
   [ "$free" -ge 35 ] || warn "less than 35 GB free - the 5 VMs need about 25 GB"
   if lsmod 2>/dev/null | grep -q '^kvm'; then warn "the kvm module is loaded - VirtualBox and KVM can't both use VT-x/AMD-V"; fi
   echo "OK"
@@ -90,7 +90,7 @@ sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum 
 
 ensure_base() {
   local img="$K8SLAB_HOME/cache/$IMAGE_FILE" sum
-  mkdir -p "$K8SLAB_HOME"/{cache,base,logs}
+  mkdir -p "$K8SLAB_HOME"/{cache,base,logs,vms}
   if [ ! -f "$VDI" ]; then
     if [ ! -f "$img" ]; then
       say "downloading $IMAGE_URL (~600 MB, once)"
@@ -117,7 +117,9 @@ create_vm() {   # name cpus mem ip mac1 mac2 role
   if [ "$(uname -s)" = Darwin ]; then nic2=(--nic2 hostonlynet --host-only-net2 "$HOSTONLY")
   else nic2=(--nic2 hostonly --host-only-adapter2 "$HOSTONLY"); fi
   say "$n: $2 vCPU, $3 MB, $4"
-  vbm createvm --name "$n" ${ARCH[@]+"${ARCH[@]}"} --ostype Ubuntu_64 --groups "$VM_GROUP" --register >/dev/null
+  # --basefolder: never VirtualBox's default machine folder, which may point somewhere this user can't write
+  vbm createvm --name "$n" ${ARCH[@]+"${ARCH[@]}"} --ostype Ubuntu_64 --groups "$VM_GROUP" \
+    --basefolder "$K8SLAB_HOME/vms" --register >/dev/null
   if ! configure_vm "$@"; then
     vbm unregistervm "$n" --delete >/dev/null 2>&1 || true
     die "creating $n failed - removed the half-made VM, so create can run again"

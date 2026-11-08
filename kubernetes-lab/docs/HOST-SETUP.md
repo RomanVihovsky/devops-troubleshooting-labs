@@ -98,7 +98,8 @@ In `cmd` the `.\` prefix isn't needed. `seed.iso` holds the public key of the de
   - converts it to one multiattach base disk;
   - creates the 5 VMs (group `/k8slab`) and boots them headless.
 
-No admin rights are needed. To create only some of them: `k8slab.bat create gw cp1`.
+No admin rights are needed. Run it as the same Windows user that runs VirtualBox Manager, so the VMs show up
+there (group `k8slab`). To create only some of them: `k8slab.bat create gw cp1`.
 
 ## 4. Check from the desktop VM
 
@@ -114,7 +115,7 @@ No admin rights are needed. To create only some of them: `k8slab.bat create gw c
 |---|---|
 | Physical RAM | 19 GB for the 5 VMs (+2 GB with w4), on top of the desktop VM and Windows |
 | vCPU | 9 for the VMs. Desktop 8 + 9 = 17 on a 16-thread CPU is mild overcommit; lower the desktop VM to 6 vCPU if things stall |
-| Windows disk | ~25 GB under `%USERPROFILE%\k8slab` and the VirtualBox machine folder |
+| Windows disk | ~25 GB under `%USERPROFILE%\k8slab` (`cache`, `base`, `vms`, `logs`); VirtualBox's default machine folder is not used |
 
 ## Day to day (on the VirtualBox host)
 

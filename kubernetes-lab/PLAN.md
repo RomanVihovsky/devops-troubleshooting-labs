@@ -261,6 +261,9 @@ Settled on 2026-11-08 by the v2 decisions above.
   - `closemedium` the base, then let the first `storageattach --mtype multiattach` set the type;
   - 7.1+ `createvm` requires `--platform-architecture x86`;
   - a failed create now deletes the half-made VM.
+- **Second run**: `createvm` failed with access denied. VirtualBox's default machine folder pointed into another
+  Windows profile (`C:\Users\evrod\...`). The VMs now go to `%K8SLAB_HOME%\vms` via `--basefolder`;
+  VirtualBox's default folder is never used.
 - **Next (you)**:
   1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
   2. `./lab vm kit`.
