@@ -45,7 +45,7 @@ retry() {
 fetch() {
   local url=$1 dest=$2 sum=${3:-} i
   for i in 1 2 3 4 5 6; do
-    if curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 -C - -o "$dest.part" "$url"; then
+    if curl -fsSL --retry 3 --retry-delay 3 --connect-timeout 20 -C - -o "$dest.part" "$url"; then
       if [ -n "$sum" ] && ! echo "$sum  $dest.part" | sha256sum -c --quiet - >/dev/null 2>&1; then
         rm -f "$dest.part"; die "checksum mismatch for $url"
       fi

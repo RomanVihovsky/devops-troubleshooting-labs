@@ -9,6 +9,10 @@ source "$LAB_DIR/lib/common.sh"
 source "$LAB_DIR/lib/vm.sh"
 # shellcheck source=lib/cluster.sh
 source "$LAB_DIR/lib/cluster.sh"
+# shellcheck source=lib/upgrade.sh
+source "$LAB_DIR/lib/upgrade.sh"
+# shellcheck source=lib/golden.sh
+source "$LAB_DIR/lib/golden.sh"
 
 usage() {
   cat <<EOF
@@ -24,7 +28,11 @@ ${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0:
   ./lab vm offline on|off     cut / restore the VMs' internet (NAT) - the cluster must keep working
 
   ./lab cluster build         kubeadm init + join + addons at the build version ($K8S_BUILD_VERSION), then doctor
+  ./lab cluster upgrade <minor>   the kubeadm upgrade procedure, e.g. ./lab cluster upgrade ${K8S_VERSION%.*}
   ./lab cluster doctor        end-to-end health check (nodes, pods, pod network, DNS, LB, Ingress, storage)
+  ./lab cluster golden        save the reset baseline (node files, etcd snapshot, gw configs) on this desktop
+  ./lab cluster reset [cluster | node <node..>]   back to the golden, in-guest (2-3 min for cluster)
+  ./lab cluster rebuild       last resort: kubeadm reset everywhere, build, upgrade, new golden (~15 min)
   eval "\$(./lab env)"         kubectl / helm for the lab cluster in this shell
   ./lab vm soak [minutes]     load every node (default 30 min) and check none stops answering
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
@@ -53,8 +61,12 @@ case "${1:-help}" in
     sub=${2:-doctor}; shift 2 || shift $#
     case $sub in
       build) cluster_build "$@" ;;
+      upgrade) cluster_upgrade "$@" ;;
       doctor) cluster_doctor ;;
-      *) die "usage: ./lab cluster build|doctor" ;;
+      golden) cluster_golden "$@" ;;
+      reset) cluster_reset "$@" ;;
+      rebuild) cluster_rebuild ;;
+      *) die "usage: ./lab cluster build|upgrade|doctor|golden|reset|rebuild" ;;
     esac ;;
   env) ensure_tools; cluster_env ;;
   node)

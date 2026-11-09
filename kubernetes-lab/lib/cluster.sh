@@ -180,6 +180,7 @@ rwx_shared() {   # each writer sees the file the other writer wrote from another
     && kx -n lab-doctor exec "$a" -- cat "/data/$bn" | grep -qx "$bn" \
     && kx -n lab-doctor exec "$b" -- cat "/data/$an" | grep -qx "$an"
 }
+snapshot_ready() { [ "$(kx -n lab-doctor get volumesnapshot shared -o jsonpath='{.status.readyToUse}')" = true ]; }
 clocks_ok() {
   local n off
   for n in $(cluster_nodes) k8s-gw; do
@@ -220,12 +221,11 @@ cluster_doctor() {
   check_eventually 60 "NFS RWX volume shared by pods on two nodes" rwx_shared
   printf 'apiVersion: snapshot.storage.k8s.io/v1\nkind: VolumeSnapshot\nmetadata: {name: shared, namespace: lab-doctor}\nspec: {volumeSnapshotClassName: nfs, source: {persistentVolumeClaimName: shared}}\n' \
     | kx apply -f - >/dev/null
-  check_eventually 90 "VolumeSnapshot of the NFS volume ready" \
-    test "$(kx -n lab-doctor get volumesnapshot shared -o jsonpath='{.status.readyToUse}')" = true
+  check_eventually 90 "VolumeSnapshot of the NFS volume ready" snapshot_ready
   check_eventually 120 "kubectl top nodes (metrics-server, verified kubelet certs)" kx top nodes
   check "node clocks within 1 s (chrony from k8s-gw)" clocks_ok
   check "API server cert valid > 300 days ($(cert_days) left)" test "$(cert_days)" -gt 300
-  kx delete namespace lab-doctor --wait=false >/dev/null 2>&1 || true
+  kx delete namespace lab-doctor --timeout=120s >/dev/null 2>&1 || warn "namespace lab-doctor still terminating"
   verdict
 }
 
