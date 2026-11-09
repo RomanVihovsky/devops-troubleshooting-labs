@@ -123,7 +123,7 @@ Network decisions:
 | vm (manual) | SSH gone | `k8slab.bat restore baseline`, then `./lab vm wait` | ~3 min |
 
 Faults that would need a hypervisor are done in the guest:
-- **Partition**: nft drops cluster peers but keeps ssh from the desktop range.
+- **Partition**: nft drops cluster peers but keeps ssh from 192.168.56.1, the desktop as seen through the host.
 - **Kubelet hang**: SIGSTOP.
 - **Slow node**: CPUQuota on `kubepods.slice`.
 - **Flaky link**: tc netem.
@@ -269,10 +269,15 @@ Settled on 2026-11-08 by the v2 decisions above.
   **Multiattach dropped**: every VM now gets a full `clonemedium` copy of the base in
   `%K8SLAB_HOME%\disks\` (~2-3 GB each at first).
 - **Fourth run**: `k8slab.bat create` created and started all 5 VMs (gw, cp1, w1-w3). The `.bat` works end to end
-  on VirtualBox 7.2.20. Blocked next: the desktop VM still has no host-only NIC, so `./lab vm wait` can't
-  reach the VMs yet.
-- **Next (you)**:
-  1. Adapter 2 = host-only on the desktop VM (HOST-SETUP §1).
-  2. `./lab vm kit`.
-  3. On Windows: `k8slab.bat check`, then `k8slab.bat create gw cp1`.
-  4. `./lab vm wait gw cp1`.
+  on VirtualBox 7.2.20.
+- **2026-11-09, VMs verified from the desktop**: `./lab vm wait` passed on all 5 VMs (SSH, hostname, static IP,
+  cloud-init done).
+  - The desktop VM needs **no host-only NIC**: its NAT traffic to 192.168.56.0/24 is routed by the Windows host,
+    so the nodes see it as 192.168.56.1. `vm check` now tests reachability; the partition fault must allow .1.
+  - Per VM: CPU and RAM as in `nodes.csv`, 40 GB disk (1.7 GB used), no swap, boot 7-9 s, NTP in sync, no failed
+    units, no `/dev/kvm`. NIC names are `enp0s3`/`enp0s8`; node-to-node RTT 0.5 ms.
+  - `k8slab.bat check` gave no Windows-hypervisor warning, so VirtualBox isn't on NEM.
+  - Fixed: `./lab vm status` stopped after the first node (ssh read the loop's stdin).
+- **Phase 0 gate, still open**:
+  1. `k8slab.bat snapshot spike` → change a file on a node → `k8slab.bat restore spike` → the change is gone.
+  2. A 30-min soak under load with no VirtualBox halt.

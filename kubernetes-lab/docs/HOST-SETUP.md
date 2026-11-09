@@ -8,7 +8,7 @@ talks to Windows or to VirtualBox.
 
 ```
 physical machine: Windows 11 + VirtualBox 7.x       host-only network 192.168.56.0/24 (host = .1)
-├─ desktop VM (Ubuntu, ./lab)    NIC1 NAT · NIC2 host-only, DHCP .101+
+├─ desktop VM (Ubuntu, ./lab)    NIC1 NAT only - reaches .0/24 through the host (seen as .1)
 ├─ k8s-gw   192.168.56.20        1 vCPU 3 GB   API load balancer, registry, Gitea, OpenBao, NFS, DNS, NTP
 ├─ k8s-cp1  192.168.56.21        2 vCPU 4 GB   control plane (kubeadm, stacked etcd)
 ├─ k8s-w1   192.168.56.31        2 vCPU 4 GB   worker, zone-a
@@ -21,20 +21,21 @@ every node VM: NIC1 NAT (internet, default route) · NIC2 host-only with a fixed
 The source of truth is [infra/vbox/nodes.csv](../infra/vbox/nodes.csv). The kit, the seed ISO and `./lab`
 all read it.
 
-## 1. One-time: the desktop VM joins the host-only network
+## 1. The desktop VM needs no extra NIC
 
-`./lab` reaches the nodes over the host-only network, so this VM needs a second NIC:
+`./lab` reaches the nodes **through VirtualBox NAT**. This VM's traffic to 192.168.56.0/24 leaves via NAT,
+and the Windows host routes it through its own host-only adapter (192.168.56.1). So the nodes see the
+desktop as **192.168.56.1**: fault scenarios that cut a node off must keep SSH from that address open.
+`./lab vm check` verifies the path once `k8s-gw` runs.
 
-1. Save your work and shut this desktop VM down.
-2. VirtualBox Manager → this VM → *Settings* → *Network* → **Adapter 2**: enable it, *Attached to:
-   Host-only Adapter*, name: the adapter whose IP is 192.168.56.1 (usually
-   "VirtualBox Host-Only Ethernet Adapter").
-   If none exists: *File → Tools → Network Manager → Host-only Networks → Create*, then
-   192.168.56.1 / 255.255.255.0 with the DHCP server on.
-3. While you're there:
-   - *System → Processor → Enable Nested VT-x/AMD-V*: **off**;
-   - optionally lower this VM to **6 vCPU** (see the budget below).
-4. Boot. Ubuntu picks up the second NIC via DHCP (192.168.56.10x). Check it with `./lab vm check`.
+The host-only network itself must exist on the VirtualBox host (`k8slab.bat check` finds it). If it doesn't:
+*File → Tools → Network Manager → Host-only Networks → Create*, 192.168.56.1 / 255.255.255.0.
+
+Optional:
+- *System → Processor → Enable Nested VT-x/AMD-V*: **off** for this VM (nothing here needs it).
+- Lower this VM to **6 vCPU** if the host stalls (see the budget below).
+- Adapter 2 = Host-only Adapter. This also works (this VM then gets a 192.168.56.10x address), but it
+  isn't needed.
 
 Optional, so `./lab vm kit` can drop the kit straight into the VirtualBox shared folder
 (`/home/shared`):

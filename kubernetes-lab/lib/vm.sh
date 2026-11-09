@@ -121,7 +121,8 @@ vm_status() {
   local n ip r line up mem disk
   printf '%-8s %-15s %-13s %-5s %-24s %-10s %s\n' NODE IP ROLE SSH UPTIME MEM-USED DISK-USED
   while read -r n _ _ ip _ _ r; do
-    if line=$(nssh "$n" 'echo "$(uptime -p | sed "s/^up //") | $(free -m | awk "/Mem/{printf \"%d/%dM\", \$3, \$2}") | $(df -h / | awk "NR==2{print \$3\"/\"\$2}")"' 2>/dev/null); then
+    # </dev/null: ssh must not swallow the rest of node_rows from the loop's stdin
+    if line=$(nssh "$n" 'echo "$(uptime -p | sed "s/^up //") | $(free -m | awk "/Mem/{printf \"%d/%dM\", \$3, \$2}") | $(df -h / | awk "NR==2{print \$3\"/\"\$2}")"' 2>/dev/null </dev/null); then
       IFS='|' read -r up mem disk <<<"$line"
       printf '%-8s %-15s %-13s %-5s %-24s %-10s %s\n' "$n" "$ip" "$r" "${C_G}up${C_0}" "${up% }" "${mem# }" "${disk# }"
     else
@@ -133,9 +134,16 @@ vm_status() {
 # -------------------------------------------------------------- vm check ----
 # Prerequisites on THIS desktop VM (the VirtualBox side is checked by: k8slab.bat check)
 vm_check() {
-  local ok_=1
-  if ip -4 -br addr | grep -q ' 192\.168\.56\.'; then ok "desktop VM is on the host-only network ($(ip -4 -br addr | awk '/ 192\.168\.56\./{print $3}'))"
-  else warn "this desktop VM has no 192.168.56.x address - shut it down, enable Adapter 2 = Host-only Adapter (docs/HOST-SETUP.md)"; ok_=0; fi
+  local ok_=1 gw; gw=$(node_ip gw)
+  # The desktop needs no host-only NIC: through VirtualBox NAT, the Windows host routes 192.168.56.0/24
+  # (the nodes then see it as 192.168.56.1). A host-only Adapter 2 works too (then .101+).
+  if ip -4 -br addr | grep -q ' 192\.168\.56\.'; then
+    ok "desktop VM has a host-only address ($(ip -4 -br addr | awk '/ 192\.168\.56\./{print $3}'))"
+  else
+    ok "desktop VM reaches 192.168.56.0/24 through VirtualBox NAT and the host (nodes see it as $HOSTONLY_IP)"
+  fi
+  if nssh gw true 2>/dev/null </dev/null; then ok "k8s-gw ($gw) answers SSH"
+  else warn "k8s-gw ($gw) does not answer SSH - created and started? (k8slab.bat status on the VirtualBox host)"; ok_=0; fi
   ensure_key; ok "SSH key $(rel "$LAB_KEY") present"
   if [ -f "$KIT_DIR/seed.iso" ]; then ok "kit built ($(rel "$KIT_DIR"))"; else warn "kit not built yet: ./lab vm kit"; ok_=0; fi
   if [ -w "$SHARED_KIT" ] || [ -w "${SHARED_KIT%/*}" ]; then ok "shared folder ${SHARED_KIT%/*} is writable"
