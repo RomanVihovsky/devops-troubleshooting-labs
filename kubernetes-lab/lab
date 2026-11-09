@@ -7,6 +7,8 @@ LAB_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$LAB_DIR/lib/common.sh"
 # shellcheck source=lib/vm.sh
 source "$LAB_DIR/lib/vm.sh"
+# shellcheck source=lib/cluster.sh
+source "$LAB_DIR/lib/cluster.sh"
 
 usage() {
   cat <<EOF
@@ -19,6 +21,11 @@ ${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0:
   ./lab vm wait [nodes]       wait until the VMs answer SSH with the right hostname and IP
   ./lab vm status             uptime, memory and disk of every node
   ./lab vm provision gw|nodes|all   install the gateway services / the Kubernetes node bits (idempotent)
+  ./lab vm offline on|off     cut / restore the VMs' internet (NAT) - the cluster must keep working
+
+  ./lab cluster build         kubeadm init + join + addons at the build version ($K8S_BUILD_VERSION), then doctor
+  ./lab cluster doctor        end-to-end health check (nodes, pods, pod network, DNS, LB, Ingress, storage)
+  eval "\$(./lab env)"         kubectl / helm for the lab cluster in this shell
   ./lab vm soak [minutes]     load every node (default 30 min) and check none stops answering
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
   ./lab health [start|stop|N] desktop health log while the VMs work
@@ -39,8 +46,17 @@ case "${1:-help}" in
       status) vm_status ;;
       soak) vm_soak "$@" ;;
       provision) vm_provision "$@" ;;
-      *) die "usage: ./lab vm check|kit|seedtest|wait|status|soak|provision" ;;
+      offline) vm_offline "$@" ;;
+      *) die "usage: ./lab vm check|kit|seedtest|wait|status|soak|provision|offline" ;;
     esac ;;
+  cluster)
+    sub=${2:-doctor}; shift 2 || shift $#
+    case $sub in
+      build) cluster_build "$@" ;;
+      doctor) cluster_doctor ;;
+      *) die "usage: ./lab cluster build|doctor" ;;
+    esac ;;
+  env) ensure_tools; cluster_env ;;
   node)
     [ $# -ge 2 ] || die "usage: ./lab node <node> [cmd...]"
     n=$2; shift 2; ip=$(node_ip "$n"); [ -n "$ip" ] || die "unknown node: $n"

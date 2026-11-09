@@ -61,8 +61,8 @@ cluster_build() {
   local -a ws; mapfile -t ws < <(workers)
   cluster_join "${ws[@]}"
   for n in $(cluster_nodes); do kx label node "$n" "topology.kubernetes.io/zone=$(zone_of "$n")" --overwrite >/dev/null; done
+  approve_csrs          # before the addons: metrics-server only gets ready once kubelets have serving certs
   addons_install
-  approve_csrs
   cluster_doctor
 }
 

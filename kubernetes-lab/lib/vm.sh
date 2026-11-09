@@ -200,10 +200,11 @@ vm_push_src() {
     | nssh "$1" 'sudo -n rm -rf /srv/k8slab/src && sudo -n mkdir -p /srv/k8slab/src && sudo -n tar -xzf - -C /srv/k8slab/src'
 }
 vm_provision() {
-  case ${1:-all} in
+  local what=${1:-all}; [ $# -gt 0 ] && shift
+  case $what in
     gw) vm_provision_gw ;;
-    nodes) vm_provision_nodes ;;
-    all) vm_provision_gw; vm_provision_nodes ;;
+    nodes) vm_provision_nodes "$@" ;;
+    all) vm_provision_gw; vm_provision_nodes "$@" ;;
     *) die "usage: ./lab vm provision gw|nodes|all" ;;
   esac
 }
@@ -217,7 +218,52 @@ vm_provision_gw() {
   nssh gw cat /srv/k8slab/images.txt > "$LAB_DIR/infra/images.txt" </dev/null
   ok "k8s-gw ready; image list in infra/images.txt ($(grep -vc '^#' "$LAB_DIR/infra/images.txt") images)"
 }
-vm_provision_nodes() { die "node provisioning comes in step 1b"; }
+# vm_provision_nodes [nodes...]: containerd + kubeadm/kubelet/kubectl on the Kubernetes nodes, in parallel
+vm_provision_nodes() {
+  local n pids=() names=() failed=0 i
+  if [ $# -eq 0 ]; then mapfile -t names < <(node_rows | awk '$7 == "control-plane" || $7 == "worker" { print $1 }')
+  else mapfile -t names < <(nodes_or_default "$@"); fi
+  curl -fs --max-time 5 "$GW_FILES/images.txt" >/dev/null || die "k8s-gw's artifact server is not up: ./lab vm provision gw"
+  info "provisioning ${names[*]} in parallel - logs $(rel "$STATE_DIR")/provision-<node>.log"
+  for n in "${names[@]}"; do
+    ( vm_push_src "$n" </dev/null && nssh "$n" 'sudo -n bash /srv/k8slab/src/infra/node/provision.sh' </dev/null ) \
+      > "$STATE_DIR/provision-$n.log" 2>&1 &
+    pids+=($!)
+  done
+  for i in "${!pids[@]}"; do
+    n=${names[$i]}
+    if wait "${pids[$i]}"; then ok "$(tail -1 "$STATE_DIR/provision-$n.log")"
+    else warn "$n failed: $(tail -3 "$STATE_DIR/provision-$n.log" | tr '\n' ' ')"; failed=1; fi
+  done
+  [ $failed = 0 ] || die "node provisioning failed - see the logs above"
+}
+
+# ------------------------------------------------------------ vm offline ----
+# vm_offline on|off: drop all egress on the NAT NIC (enp0s3, except DHCP) of every VM - proves nothing in the
+# cluster needs the internet. Not persistent across reboots (a test mode, not a fault).
+vm_offline() {
+  local n mode=${1:-}
+  case $mode in on|off) ;; *) die "usage: ./lab vm offline on|off" ;; esac
+  for n in $(active_nodes); do
+    if [ "$mode" = on ]; then
+      nx "$n" 'nft -f - <<EOF
+table inet lab_offline
+delete table inet lab_offline
+table inet lab_offline {
+  chain out {
+    type filter hook output priority 0; policy accept;
+    oifname "enp0s3" udp dport 67 accept
+    oifname "enp0s3" drop
+  }
+}
+EOF' </dev/null || die "$n: could not set the offline rules"
+    else
+      nx "$n" 'nft delete table inet lab_offline 2>/dev/null || true' </dev/null
+    fi
+  done
+  if [ "$mode" = on ]; then touch "$STATE_DIR/offline"; ok "offline: NAT egress dropped on $(active_nodes | tr '\n' ' ')"
+  else rm -f "$STATE_DIR/offline"; ok "online again"; fi
+}
 
 # ---------------------------------------------------------------- vm soak ----
 # vm_soak [minutes]: capped load on every node (CPU at half its vCPUs, 1/4 of RAM held, 256 MB disk writes
