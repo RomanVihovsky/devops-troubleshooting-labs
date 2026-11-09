@@ -283,5 +283,9 @@ Settled on 2026-11-08 by the v2 decisions above.
   - 52 probes per node: 0 missed, 0 reboots, load active throughout (max load 1.2-2.6);
   - desktop VM: max load 0.79, ≥16.9 GB available, journal never stopped, gw ping never down;
   - no VirtualBox halt.
-- **Phase 0 gate, still open**: `k8slab.bat snapshot spike` → change a file on a node →
-  `k8slab.bat restore spike` → the change is gone.
+- **Snapshot round trip passed (2026-11-09)**: `k8slab.bat snapshot spike` ran on all 5 VMs (clean ACPI
+  shutdown each time). A flushed marker `/home/lab/after-snapshot` was written on cp1 at 11:01:01. After
+  `k8slab.bat restore spike`, all VMs rebooted (cp1 at 11:01:34) and the marker was gone. (`/tmp` is no
+  proof: Ubuntu empties it at boot.)
+- **Phase 0 gate: PASSED (2026-11-09).** Next: Phase 1 - pin versions, `./lab vm provision`, kubeadm 1.36 →
+  1.37, addons, `cluster doctor/golden`.
