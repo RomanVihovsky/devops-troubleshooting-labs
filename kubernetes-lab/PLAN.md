@@ -422,3 +422,67 @@ Settled on 2026-11-08 by the v2 decisions above.
     `envs/<app>`;
   - PLAN §2.1/§2.3 still describe docker-ce, dnsmasq and apt-cacher-ng; the gw is Docker-free (nginx, CoreDNS
     `lab` zone).
+
+### Phase 4 (2026-11-09): the learn track T01-T16
+
+- **16 guided labs** in `learn/` (`kind: learn`), the ansible-lab learn style:
+  - numbered steps, a **Test** line, 3 hints that give the commands;
+  - `solution.md` with takeaways;
+  - the same `start/verify/solve/selftest` as the incidents (verify must FAIL before the work).
+- **T01-T08**:
+  - T01 lab tour;
+  - T02 kubeadm anatomy;
+  - T03 joins **k8s-w3** back by hand (your decision: no w4 VM). It teaches the `--node-ip` NAT trap and the
+    serving CSR;
+  - T04 packet path;
+  - T05 storage (local-path, NFS RWX, snapshot restore, Retain);
+  - T06 MetalLB / Ingress / Gateway;
+  - T07 RBAC + CSR users;
+  - T08 etcd backup/restore.
+- **T09-T16**:
+  - T09 kubeadm upgrade, from a bare 1.36 cluster;
+  - T10 Helm (failed release, rollback, release Secrets);
+  - T11 Argo CD (app-of-apps, AppProject, self-heal);
+  - T12 Sealed Secrets (key-loss drill);
+  - T13 ESO + OpenBao (least-privilege role, caProvider, rotation);
+  - T14 SOPS + age (updatekeys, no plaintext in history);
+  - T15 NetworkPolicy for the GitOps stack (the API's post-DNAT endpoint);
+  - T16 hardening (encryption at rest, audit, PSA).
+- **Framework additions**:
+  - `answer`/`answered`: `answers.yaml` checked against live truth from `.lab/facts.sh`;
+  - an optional `.lab/cleanup.sh` hook;
+  - `tcp_ok_as`/`check_reach`;
+  - `cluster_bare_build <version>`;
+  - `./lab ui`;
+  - `./lab env` exports for bao, sops and argocd;
+  - the GitOps reset runs **before** namespace deletion (otherwise a self-healing app re-creates its
+    namespace) and removes non-baseline Applications/AppProjects;
+  - "as found" is committed after setup.
+
+  This closes 2 Phase 3 gaps (`curl_matrix` → `check_reach`; `rebuild`/`version:` → `cluster_bare_build` +
+  `reset: cluster`). The ns-level OpenBao kv restore is still open: T13 uses `reset: gw`.
+- **Fixes on the way**:
+  - T08's first restore proof was the etcd cluster ID. A proper restore keeps the ID, because it derives from
+    the member name, peer URL and token. The proof is now a new member dir (inode).
+  - `ls -A` counted the kubelet package's hidden `.kubelet-keep` in the manifests dir. kubelet skips hidden
+    files.
+  - `cluster_bare_build` first kept cp1's kubeconfigs too. kubeadm init then tries to create the
+    admin.conf ClusterRoleBinding before the API is up, and fails. Now only the PKI is kept.
+  - The cluster reset after that failed build brought the cluster back cleanly: a good test of the reset
+    ladder.
+- **Timings** (gate runs; each lab's time includes the cleanup of the lab before it):
+  - T01 17 s, T02 22 s, T07 20 s, T11 32-36 s, T14 20 s, T15 31 s;
+  - T03 85 s, T04 93-106 s (after T03's cluster reset), T05 58-60 s, T06 81 s, T08 121 s;
+  - T09 485-516 s (bare build ≈ 4 min + upgrade ≈ 3-4 min);
+  - T10 176-180 s (after T09's cluster reset), T12 67 s, T13 118-128 s, T16 152-165 s;
+  - **a whole learn run takes ≈ 29 min**.
+- **Gate: PASSED.**
+  - `./lab selftest learn` passed twice in a row: 17:58-18:26 and 18:26-18:55 UTC, 16/16 `broken:ok fixed:ok`
+    both times.
+  - Then `./lab selftest pilots` 4/4 (regression, incl. D02 with the new GitOps cleanup order) and
+    `./lab cluster doctor` PASS.
+- **Phase 4: DONE (2026-11-09).** Next: Phase 5, wave 1 (~60 incidents, including the research doc's 8:
+  D01, D03, D04, Y01, Y03, A12, X09 + D02 done). Open gaps carried over:
+  - an ns-level OpenBao kv restore, needed by the Y scenarios;
+  - the CATALOG app names (`labapp`/`envs/dev|prod`/`payments`) vs the live repo (`demo`/`shop`);
+  - the PLAN §2 gw description (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
