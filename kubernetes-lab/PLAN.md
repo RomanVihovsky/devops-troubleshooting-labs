@@ -321,4 +321,11 @@ Settled on 2026-11-08 by the v2 decisions above.
     in, so that soak is void. Nothing from it ended up in the snapshot (no `/var/tmp` leftovers).
   - **Cold boot of all VMs → doctor PASS** without any reset, so the baseline snapshot holds a healthy
     v1.37.1 cluster.
-  - Still open: a full 2-h `./lab vm soak 120` (+ doctor) with nothing restarted during it.
+  - **2-h soak skipped (decision, 2026-11-09).** The evidence so far:
+    - the 30-min Phase 0 soak under load;
+    - ~1.5 h of bursty cluster work with no halt (build, upgrade, 10 resets, offline doctor, cold boot);
+    - `k8slab.bat check` showed no Windows hypervisor (NEM).
+
+    Run `./lab vm soak 120` before the first overnight selftest, or as soon as a VirtualBox halt shows up.
+- **Phase 1: DONE (2026-11-09).** Baseline: v1.37.1, golden in `.state/golden`, `baseline` snapshot on the host.
+  Next: Phase 2 - GitOps + secrets (Gitea, Argo CD, Sealed Secrets, ESO + OpenBao, charts), then a new golden.
