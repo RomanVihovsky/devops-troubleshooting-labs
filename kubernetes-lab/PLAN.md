@@ -329,3 +329,36 @@ Settled on 2026-11-08 by the v2 decisions above.
     Run `./lab vm soak 120` before the first overnight selftest, or as soon as a VirtualBox halt shows up.
 - **Phase 1: DONE (2026-11-09).** Baseline: v1.37.1, golden in `.state/golden`, `baseline` snapshot on the host.
   Next: Phase 2 - GitOps + secrets (Gitea, Argo CD, Sealed Secrets, ESO + OpenBao, charts), then a new golden.
+
+### Phase 2 (2026-11-09): GitOps + secrets
+
+- **Pins**: Argo CD 3.5.6 (chart 10.11.6), Sealed Secrets 0.41.2 (chart 2.22.0), ESO 2.14.0, OpenBao 2.7.2, Gitea
+  28.2.0, SOPS 3.13.3, age 1.3.2, `lab/redis` (7.4.11-alpine), `lab/postgres` (16.14-alpine). Totals: 28 artifacts,
+  41 images, 5 labapp tags.
+- **2a gw**:
+  - OpenBao uses raft storage: 2.7 has no `file` backend and no `disable_mlock`.
+  - TLS from a lab CA; static-key auto-unseal, unsealed by itself after a gw reboot.
+  - Gitea: SQLite, offline, repo `lab/gitops`.
+  - The first init lost the one-time root token to a 5-s client timeout. Init now waits up to 180 s, and
+    `--reset-openbao` exists for exactly that case.
+- **2b**: `./lab images build` (docker save → crane push on gw).
+- **2c**: `./lab gitops stack`:
+  - CoreDNS `lab` zone;
+  - Sealed Secrets (key + cert backed up);
+  - ESO with OpenBao kubernetes auth: store Ready on the first try;
+  - Argo CD on .201.
+- **2d**: `./lab gitops seed`. demo (SealedSecret) and shop (ExternalSecret) are Synced + Healthy, and doctor PASS
+  with 31 checks (12 new for GitOps & secrets: shop end to end, demo 401/200, ...). Two fixes on the way:
+  - Pods hit ImagePullBackOff: containerd needs a `certs.d/registry.lab:5000` hosts.toml for the plain-HTTP lab
+    registry.
+  - Node provisioning's "joined node keeps its packages" guard checked `admin.conf` (cp only). A re-provision
+    would have downgraded the workers to 1.36.5; it now checks `kubelet.conf`.
+- **2e**:
+  - New golden: 36 MB, gw part with Gitea + OpenBao data.
+  - `cluster reset` → doctor PASS in 56 s. The first reset took 170 s: approved CSRs are garbage-collected after
+    1 h, so "wait until every node has an approved serving cert" ran out its timeout. A reset now only approves
+    pending CSRs.
+  - Offline doctor PASS.
+  - **Still to do (you): retake `k8slab.bat snapshot baseline`.**
+- **Phase 2: DONE** once the snapshot is retaken. Next: Phase 3 - the scenario framework (start/verify/hint/solve/
+  selftest, reset ladder per scenario) and 4 pilots.

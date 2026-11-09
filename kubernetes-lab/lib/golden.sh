@@ -136,7 +136,7 @@ cluster_reset() {
     *) die "usage: ./lab cluster reset [cluster | node <node...>]" ;;
   esac
   retry 240 nodes_ready || warn "not all nodes Ready yet"
-  approve_csrs
+  approve_pending_csrs
   ok "reset done in $((SECONDS - t0)) s"
   cluster_doctor
 }

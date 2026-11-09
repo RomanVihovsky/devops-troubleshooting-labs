@@ -124,7 +124,7 @@ there (group `k8slab`). To create only some of them: `k8slab.bat create gw cp1`.
 |---|---|
 | `k8slab.bat stop` / `start` | ACPI shutdown, then start headless |
 | `k8slab.bat status` | State and current snapshot per VM |
-| `k8slab.bat snapshot baseline` | The panic button, taken once when `./lab` says the baseline is ready |
+| `k8slab.bat snapshot baseline` | The panic button. Retake it whenever `./lab cluster golden` was re-taken (new phase, rebuild) so both baselines match |
 | `k8slab.bat restore baseline` | Only if a VM is broken beyond SSH |
 | `k8slab.bat destroy` | Delete the VMs (asks first) |
 

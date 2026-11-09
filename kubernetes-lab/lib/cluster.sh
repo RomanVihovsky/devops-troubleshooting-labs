@@ -109,6 +109,19 @@ approve_csrs() {
   warn "not every node got an approved kubelet serving cert (kubectl get csr)"
 }
 
+# approve_pending_csrs: after a reset the kubelets keep their serving certs (golden pki), and approved CSRs
+# are garbage-collected after an hour - so only approve what is actually pending, for a short while
+approve_pending_csrs() {
+  local pending _
+  for _ in $(seq 10); do
+    pending=$(kx get csr -o json | jq -r '.items[] | select(.spec.signerName == "kubernetes.io/kubelet-serving")
+      | select((.status.conditions // []) | length == 0) | .metadata.name')
+    # shellcheck disable=SC2086
+    [ -z "$pending" ] || kx certificate approve $pending >/dev/null
+    sleep 2
+  done
+}
+
 # ---------------------------------------------------------------- addons ----
 helm_up() {   # release namespace chart-file values-file
   helm upgrade --install "$1" "$3" -n "$2" --create-namespace -f "$4" --wait --timeout 6m >/dev/null
