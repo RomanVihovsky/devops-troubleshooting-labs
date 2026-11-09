@@ -289,3 +289,30 @@ Settled on 2026-11-08 by the v2 decisions above.
   proof: Ubuntu empties it at boot.)
 - **Phase 0 gate: PASSED (2026-11-09).** Next: Phase 1 - pin versions, `./lab vm provision`, kubeadm 1.36 →
   1.37, addons, `cluster doctor/golden`.
+
+### Phase 1 (2026-11-09)
+
+- **Pins**: k8s 1.36.5 → 1.37.1 (1.36.6/1.37.2 were only 12 days old), containerd 2.4.2, runc 1.5.2, Calico 3.33.0
+  (tested on 1.35-1.37), MetalLB chart 0.16.1, Traefik chart 42.1.3, metrics-server chart 3.14.0, Gateway API
+  1.6.3, local-path 0.0.37, csi-driver-nfs 4.13.6, snapshotter 8.7.0, registry 3.1.2, crane 0.22.1, helm 4.3.1.
+  19 files in `infra/artifacts.txt`, 30 images in `infra/images.txt`.
+- **1a gw**: Docker-free; first sync ~5 min.
+  - Registry with 30 images (24 repos), flat apt repo with both minors (141 MB), 19 verified files.
+  - haproxy, chrony, NFS and nginx all up; gw uses 3.5 GB disk and 400 MB RAM.
+- **1b nodes**: all 4 in ~2 min.
+  - containerd mirrors (`override_path`); packages held; chrony from gw; 16 images pre-pulled.
+  - With NAT egress dropped, every node pulls from registry.k8s.io, quay.io and docker.io through gw.
+- **1c build at 1.36.5**: `./lab cluster build` ~5 min; doctor PASS on all 19 checks. That includes the desktop
+  reaching NodePorts, the MetalLB LB IP, Ingress and an HTTPRoute through NAT → Windows → host-only.
+- **1d**:
+  - `cluster upgrade 1.37` → v1.37.1 (etcd 3.6.8 → 3.7.0). First run: `uncordon` hit the API restart window
+    (static pods recreated by the new kubelet; brief Forbidden). Fixed with retries; the upgrade resumes.
+  - Golden: 27 MB, etcd snapshot of 1,227 keys.
+  - `cluster reset` brought back each fault twice, every time with doctor PASS:
+    - apiserver bad flag: 22 / 23 s;
+    - etcd data-dir moved (cluster looked empty): 27 / 22 s;
+    - kubelet disabled on w2: 23 / 31 s;
+    - rogue static pod: 27 / 28 s;
+    - `reset node w2`: 10 s.
+  - Offline doctor PASS, after fixing `vm offline`: an OUTPUT-hook `oifname` rule dropped the nodes' own
+    traffic to 10.96.0.1 (oifname is pre-DNAT-reroute), so Calico CNI failed. Now matched in POSTROUTING.

@@ -190,6 +190,12 @@ clocks_ok() {
 }
 cert_days() { nx "$CP" 'echo $(( ($(date -d "$(openssl x509 -enddate -noout -in /etc/kubernetes/pki/apiserver.crt | cut -d= -f2)" +%s) - $(date +%s)) / 86400 ))' </dev/null; }
 
+# delete the doctor namespace and wait (bounded) until it is gone - a golden must not contain it
+doctor_cleanup() {
+  kx get namespace lab-doctor >/dev/null 2>&1 || return 0
+  kx delete namespace lab-doctor --wait=false >/dev/null 2>&1
+  kx wait --for=delete namespace/lab-doctor --timeout=120s >/dev/null 2>&1
+}
 cluster_doctor() {
   local np w
   ensure_tools
@@ -201,6 +207,7 @@ cluster_doctor() {
   check "kubelets run the API server's version ($(kx version -o json 2>/dev/null | jq -r .serverVersion.gitVersion))" same_versions
   check_eventually 180 "all pods Running/Completed (kube-system, calico, metallb, traefik, ...)" system_pods_ok
 
+  doctor_cleanup || warn "a previous lab-doctor namespace is still terminating"
   render "$ADDONS/doctor.yaml" AGNHOST="$AGNHOST_IMAGE" BUSYBOX="$BUSYBOX_IMAGE" | kx apply -f - >/dev/null
   check_eventually 180 "doctor workloads ready (agnhost on every node, 2 RWX writers)" \
     kx -n lab-doctor rollout status ds/echo deploy/writer --timeout=5s
@@ -225,7 +232,7 @@ cluster_doctor() {
   check_eventually 120 "kubectl top nodes (metrics-server, verified kubelet certs)" kx top nodes
   check "node clocks within 1 s (chrony from k8s-gw)" clocks_ok
   check "API server cert valid > 300 days ($(cert_days) left)" test "$(cert_days)" -gt 300
-  kx delete namespace lab-doctor --timeout=120s >/dev/null 2>&1 || warn "namespace lab-doctor still terminating"
+  doctor_cleanup || warn "namespace lab-doctor still terminating"
   verdict
 }
 

@@ -241,6 +241,9 @@ vm_provision_nodes() {
 # ------------------------------------------------------------ vm offline ----
 # vm_offline on|off: drop all egress on the NAT NIC (enp0s3, except DHCP) of every VM - proves nothing in the
 # cluster needs the internet. Not persistent across reboots (a test mode, not a fault).
+# The match is in POSTROUTING on purpose: in the OUTPUT hook "oifname" is the device chosen *before*
+# kube-proxy's DNAT re-routes a packet (host -> 10.96.0.1 first routes via the NAT default route), so an
+# output-hook rule would drop the node's own API traffic (Calico CNI calls 10.96.0.1 - pods stop starting).
 vm_offline() {
   local n mode=${1:-}
   case $mode in on|off) ;; *) die "usage: ./lab vm offline on|off" ;; esac
@@ -251,7 +254,7 @@ table inet lab_offline
 delete table inet lab_offline
 table inet lab_offline {
   chain out {
-    type filter hook output priority 0; policy accept;
+    type filter hook postrouting priority 200; policy accept;
     oifname "enp0s3" udp dport 67 accept
     oifname "enp0s3" drop
   }

@@ -86,7 +86,8 @@ reset_etcd() {
 set -eu
 rm -rf /var/lib/etcd.restore
 etcdutl snapshot restore /var/tmp/golden-etcd.db --data-dir /var/lib/etcd.restore --name $CP \
-  --initial-cluster $CP=https://$(node_ip "$CP"):2380 --initial-advertise-peer-urls https://$(node_ip "$CP"):2380 >/dev/null
+  --initial-cluster $CP=https://$(node_ip "$CP"):2380 --initial-advertise-peer-urls https://$(node_ip "$CP"):2380 \
+  >/var/tmp/etcd-restore.log 2>&1 || { cat /var/tmp/etcd-restore.log >&2; exit 1; }
 rm -rf /var/lib/etcd.before-reset
 [ -d /var/lib/etcd ] && mv /var/lib/etcd /var/lib/etcd.before-reset
 mv /var/lib/etcd.restore /var/lib/etcd
@@ -100,7 +101,8 @@ reset_gw() {
     exportfs -ra; systemctl restart haproxy chrony nginx k8slab-registry nfs-server' </dev/null
 }
 
-start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl start kubelet' </dev/null; done; }
+# enable too: a scenario may have disabled kubelet, which would bite at the next reboot
+start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl enable --now containerd kubelet 2>/dev/null' </dev/null; done; }
 
 # cluster_reset [cluster | node <names...>]
 cluster_reset() {
