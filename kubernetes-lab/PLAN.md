@@ -316,3 +316,9 @@ Settled on 2026-11-08 by the v2 decisions above.
     - `reset node w2`: 10 s.
   - Offline doctor PASS, after fixing `vm offline`: an OUTPUT-hook `oifname` rule dropped the nodes' own
     traffic to 10.96.0.1 (oifname is pre-DNAT-reroute), so Calico CNI failed. Now matched in POSTROUTING.
+- **1e**:
+  - `k8slab.bat snapshot baseline` was taken (12:25). It shut down all VMs cleanly, with the soak only 2.5 min
+    in, so that soak is void. Nothing from it ended up in the snapshot (no `/var/tmp` leftovers).
+  - **Cold boot of all VMs → doctor PASS** without any reset, so the baseline snapshot holds a healthy
+    v1.37.1 cluster.
+  - Still open: a full 2-h `./lab vm soak 120` (+ doctor) with nothing restarted during it.
