@@ -349,8 +349,23 @@ exit /b 0
 :snap_take
 call :state %1
 if "%ST%"=="none" exit /b 0
+rem replace: delete EVERY old snapshot of that name first (a duplicate name makes "restore" ambiguous);
+rem right after a power-off VirtualBox may still lock the disk, so retry - and never take a duplicate
+set /a TRIES=0
+:snap_del_loop
 VBoxManage.exe snapshot "%~1" showvminfo "%SNAP%" >nul 2>&1
-if not errorlevel 1 VBoxManage.exe snapshot "%~1" delete "%SNAP%" >nul
+if errorlevel 1 goto snap_do_take
+VBoxManage.exe snapshot "%~1" delete "%SNAP%" >nul 2>&1
+if not errorlevel 1 goto snap_del_loop
+set /a TRIES+=1
+if %TRIES% GEQ 6 (
+  echo ERROR: %~1: cannot delete the old snapshot %SNAP% - nothing taken, VM left powered off
+  exit /b 1
+)
+call :sleep2
+call :sleep2
+goto snap_del_loop
+:snap_do_take
 VBoxManage.exe snapshot "%~1" take "%SNAP%" --description "kubernetes-lab %DATE% %TIME%" >nul || exit /b 1
 echo    %~1: snapshot %SNAP% taken
 exit /b 0

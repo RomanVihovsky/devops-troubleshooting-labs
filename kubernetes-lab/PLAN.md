@@ -359,6 +359,10 @@ Settled on 2026-11-08 by the v2 decisions above.
     1 h, so "wait until every node has an approved serving cert" ran out its timeout. A reset now only approves
     pending CSRs.
   - Offline doctor PASS.
-  - **Still to do (you): retake `k8slab.bat snapshot baseline`.**
-- **Phase 2: DONE** once the snapshot is retaken. Next: Phase 3 - the scenario framework (start/verify/hint/solve/
+  - `baseline` snapshot retaken (14:35) → cold boot → doctor PASS incl. GitOps, so the snapshot holds Phase 2.
+    On k8s-gw, deleting the old `baseline` failed ("disk locked by another task", right after the power-off),
+    and the kit took the new one anyway, which leaves 2 snapshots named `baseline` there. Fixed in the kit: every
+    same-named snapshot is deleted first, with retries, and nothing is taken if that fails.
+    To clean up: `k8slab.bat snapshot baseline gw`.
+- **Phase 2: DONE (2026-11-09).** Next: Phase 3 - the scenario framework (start/verify/hint/solve/
   selftest, reset ladder per scenario) and 4 pilots.

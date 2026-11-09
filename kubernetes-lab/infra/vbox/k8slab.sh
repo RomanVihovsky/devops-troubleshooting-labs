@@ -181,7 +181,7 @@ pick() { local out; out=$(select_nodes "$@"); read -r -d "" -a SEL <<<"$out" || 
 only_created() { local n out=(); for n in "${SEL[@]}"; do exists "$n" && out+=("$n"); done; SEL=(${out[@]+"${out[@]}"}); }
 
 main() {
-  local cmd=${1:-help} name n ans; [ $# -gt 0 ] && shift
+  local cmd=${1:-help} name n ans tries; [ $# -gt 0 ] && shift
   local -a r
   SEL=()
   case $cmd in
@@ -202,7 +202,15 @@ main() {
       if [ "$cmd" = snapshot ]; then
         stop_all "${SEL[@]}"
         for n in "${SEL[@]}"; do
-          if vbm snapshot "$n" showvminfo "$name" >/dev/null 2>&1; then vbm snapshot "$n" delete "$name"; fi
+          # delete EVERY old snapshot of that name (duplicates make "restore" ambiguous); right after a
+          # power-off VirtualBox may still lock the disk, so retry - and never take a duplicate
+          tries=0
+          while vbm snapshot "$n" showvminfo "$name" >/dev/null 2>&1; do
+            vbm snapshot "$n" delete "$name" >/dev/null 2>&1 && continue
+            tries=$((tries + 1))
+            [ $tries -lt 6 ] || die "$n: cannot delete the old snapshot $name - nothing taken, VM left powered off"
+            sleep 4
+          done
           vbm snapshot "$n" take "$name" --description "kubernetes-lab $(date '+%F %T')" >/dev/null
           echo "   $n: snapshot $name taken"
         done
