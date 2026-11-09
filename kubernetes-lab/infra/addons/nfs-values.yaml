@@ -1,0 +1,3 @@
+# csi-driver-nfs: chart defaults. The snapshot controller and CRDs are installed separately (external-snapshotter);
+# StorageClass "nfs" + VolumeSnapshotClass: storage.yaml
+{}

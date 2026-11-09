@@ -1,0 +1,12 @@
+# distribution (registry) on k8s-gw: images stored under their upstream host,
+# e.g. registry.lab:5000/registry.k8s.io/pause:3.10.2 (containerd mirrors with override_path)
+version: 0.1
+log:
+  level: info
+storage:
+  filesystem:
+    rootdirectory: /srv/k8slab/registry
+  delete:
+    enabled: true
+http:
+  addr: :5000

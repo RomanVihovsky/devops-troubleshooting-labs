@@ -193,6 +193,32 @@ vm_seedtest() {
   verdict
 }
 
+# ---------------------------------------------------------- vm provision ----
+# vm_push_src <node>: copy versions.env + infra/ to /srv/k8slab/src on a node (the scripts run from there)
+vm_push_src() {
+  tar -C "$LAB_DIR" -czf - versions.env infra \
+    | nssh "$1" 'sudo -n rm -rf /srv/k8slab/src && sudo -n mkdir -p /srv/k8slab/src && sudo -n tar -xzf - -C /srv/k8slab/src'
+}
+vm_provision() {
+  case ${1:-all} in
+    gw) vm_provision_gw ;;
+    nodes) vm_provision_nodes ;;
+    all) vm_provision_gw; vm_provision_nodes ;;
+    *) die "usage: ./lab vm provision gw|nodes|all" ;;
+  esac
+}
+vm_provision_gw() {
+  local log="$STATE_DIR/provision-gw.log"
+  info "provisioning k8s-gw - log $(rel "$log"); the first run downloads ~2 GB"
+  vm_push_src gw
+  if ! nssh gw 'sudo -n bash /srv/k8slab/src/infra/gw/provision.sh' 2>&1 | tee "$log"; then
+    die "k8s-gw provisioning failed - see $(rel "$log")"
+  fi
+  nssh gw cat /srv/k8slab/images.txt > "$LAB_DIR/infra/images.txt" </dev/null
+  ok "k8s-gw ready; image list in infra/images.txt ($(grep -vc '^#' "$LAB_DIR/infra/images.txt") images)"
+}
+vm_provision_nodes() { die "node provisioning comes in step 1b"; }
+
 # ---------------------------------------------------------------- vm soak ----
 # vm_soak [minutes]: capped load on every node (CPU at half its vCPUs, 1/4 of RAM held, 256 MB disk writes
 # every 30 s) while the desktop probes each node every 30 s. Gate for "VirtualBox stays up under load".

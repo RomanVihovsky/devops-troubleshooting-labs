@@ -60,9 +60,9 @@ state()  { { vbm showvminfo "$1" --machinereadable 2>/dev/null || true; } | sed 
 
 hostonly_name() {   # the host-only adapter (Linux) / network (macOS) that owns $HOSTONLY_IP
   if [ "$(uname -s)" = Darwin ]; then
-    vbm list hostonlynets | awk -F': *' -v n="$HOSTONLY_NET" '$1=="Name" && $2==n {print n; exit}'
+    vbm list hostonlynets | awk -F': *' -v n="$HOSTONLY_NET" '!f && $1=="Name" && $2==n {print n; f=1}'
   else
-    vbm list hostonlyifs | awk -F': *' -v ip="$HOSTONLY_IP" '$1=="Name"{n=$2} $1=="IPAddress" && $2==ip {print n; exit}'
+    vbm list hostonlyifs | awk -F': *' -v ip="$HOSTONLY_IP" '$1=="Name"{n=$2} !f && $1=="IPAddress" && $2==ip {print n; f=1}'
   fi
 }
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=kubernetes-lab image registry (distribution) on :5000
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/registry serve /etc/k8slab/registry.yml
+Restart=always
+RestartSec=3
+User=k8slab-registry
+
+[Install]
+WantedBy=multi-user.target
