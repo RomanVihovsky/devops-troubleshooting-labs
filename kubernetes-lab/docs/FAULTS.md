@@ -1,0 +1,92 @@
+# How the faults are made (and how to build your own)
+
+Every lab is a real failure on the real cluster: 5 VirtualBox VMs (`k8s-gw`, `k8s-cp1`, `k8s-w1..3`),
+kubeadm v1.37, Calico, MetalLB, Traefik, Argo CD, Sealed Secrets, ESO + OpenBao. A scenario's `setup.sh`
+breaks something the way it breaks in production. `verify.sh` checks the **outcome** (what users and
+operators observe), never the keystrokes. `solve.sh` is the reference fix that `./lab selftest` uses.
+
+## Anatomy
+
+```
+scenarios/<ID>-kebab/            (learn/T..-kebab/ for the learn track: same files, kind: learn)
+  scenario.yaml   id, title, kind, level (1-3), domain, wave, est, reset, namespaces, nodes, gitops, [pilot]
+  ticket.md       "# Title", the incident as the reporter sees it, and a **Test**: line (what verify checks)
+  hints.md        3 x "## Hint n": where to look -> what's wrong -> how to fix
+  manifests/      optional: copied to workspace/<ID>/ ("as found", ./lab diff shows the student's changes)
+  .lab/setup.sh   build the broken state            (bash -euo pipefail)
+  .lab/verify.sh  check ... ; verdict              (bash -u, NO pipefail: `kubectl | grep -q` races)
+  .lab/solve.sh   the reference fix                (bash -euo pipefail)
+  .lab/solution.md  root cause, diagnosis commands, fix, interview notes
+```
+
+The scripts run on the desktop VM, from `workspace/<ID>/`, with `lib/{common,vm,cluster,gitops,golden,scenario}.sh`
+loaded. `$SCN` is the scenario directory and `$LAB_ID` its ID. During `verify`, every API request has a 10 s
+timeout (`KX_TIMEOUT`), so a dead API fails a check instead of hanging it.
+
+## Reset levels - pick the cheapest one that undoes *everything* setup and the student may change
+
+| `reset:` | Undoes | Use for |
+|---|---|---|
+| `ns` | the `namespaces:` + every object labelled `lab.k8slab/scenario=<ID>` (anywhere) | workloads, Services, config, RBAC, policies - confined to the scenario's own namespaces / labelled objects |
+| `node` | `ns` + the golden node files, runtime faults and pods on `nodes:` | kubelet, containerd, CNI config, sysctls, swap, modules, clock, nft/tc on a worker |
+| `gw` | `ns` + gw's haproxy, chrony, NFS, nginx, registry, Gitea and OpenBao data | API load balancer, registry, Git server, secret store faults |
+| `cluster` | everything: etcd snapshot restore + every node + gw (~60 s) | control plane, etcd, anything touching shared objects (kube-system ConfigMaps/DaemonSets, CoreDNS, kube-proxy, Calico, CRDs, Argo CD itself) |
+
+Add **`gitops: true`** when the scenario commits to `lab/gitops`. The cleanup then force-pushes the tag
+`baseline` to `main`, and Argo CD re-syncs and waits until `lab-apps`, `demo` and `shop` are Synced and
+Healthy. The student also gets `workspace/gitops`.
+
+**Rule of thumb**: if setup or a plausible wrong fix can change an object you didn't create, use `cluster`.
+After every cleanup, `cluster_quick` checks nodes, system pods and Argo apps. If that fails, the next `start`
+escalates to a full `cluster reset` by itself.
+
+## Techniques and helpers
+
+| Helper | What |
+|---|---|
+| `kns ns..` / `ka -f file|-` | create namespaces / apply objects - always labelled for cleanup |
+| `kx ...` | kubectl against the lab cluster |
+| `nx <node> '<cmd>'` / `nxi <node>` | root on a node (command / script on stdin) |
+| `wait_rollout ns kind/name [s]` | rollout status with a timeout |
+| `http_code ns url [header]` / `http_ok ...` | HTTP status seen **from inside** the cluster (throwaway busybox pod) |
+| `http_out url [Host]` | HTTP status **from the desktop** (MetalLB 192.168.56.200, NodePorts) |
+| `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready and no restarts for s seconds" |
+| `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view |
+| `fault_partition node` / `fault_clear node` | cut a node off the cluster network (nft table `lab_fault`), keep the desktop's SSH |
+| `gitops_commit "msg" <<'EOF' ... EOF` | change lab/gitops as a colleague (`dev-bob`), pushed to `main` |
+| `argo_refresh app` / `argo_sync app` / `argo_app_ok app` | Argo CD |
+| `gx /api/path` / `bx <bao args>` | Gitea API (user lab) / OpenBao CLI (root) |
+| `check desc cmd..` / `check_eventually s desc cmd..` / `verdict` | verify building blocks |
+| `remember k v` / `recall k` | facts from setup to verify (kept in `.state`) |
+
+Gotchas:
+- **`check_eventually 60 "x" test "$(cmd)" = y` evaluates `$(cmd)` once.** Wrap it in a function.
+- **Egress device rules go in POSTROUTING.** In the nftables OUTPUT hook, `oifname` is the device chosen
+  *before* kube-proxy's DNAT re-routes a packet. Host → 10.96.0.1 first routes via the NAT NIC, so an
+  output-hook "drop enp0s3" kills the node's own API calls and Calico CNI fails.
+- **The desktop reaches the VMs through VirtualBox NAT.** Nodes see it as **192.168.56.1**; a partition
+  fault must keep that address, or `./lab` loses the node.
+- **In selftest's "broken" pass, `LAB_EXPECT_FAIL=1` shortens `check_eventually` to 3 s.** Setup must wait
+  until the broken state really exists (e.g. node NotReady, app OutOfSync) before it returns.
+- **Never leave files under `/etc/kubernetes/manifests`** except the 4 control-plane manifests: kubelet
+  runs every file there.
+- **An Argo CD sync only reverts what Git declares.** A field added by hand that Git never had (an extra env
+  var, label or annotation) survives a sync and self-heal, and the app still says Synced. If a GitOps
+  scenario's setup adds one, its solve and hints must remove it explicitly (D02).
+- **Selftest output belongs in `.state/`, not `/tmp`.** The desktop's `/tmp` is wiped at boot.
+  `./lab selftest` appends every result line to `.state/selftest.log`.
+
+## Build your own scenario
+
+1. Copy a pilot that has the same reset level: `N01` (ns), `L01` (node), `K01` (cluster), `D02` (GitOps).
+2. Write the ticket from the reporter's point of view: symptoms, not causes. End it with a **Test** line.
+3. `setup.sh` breaks things and waits until the symptom is real. `verify.sh` checks the outcome, including
+   the "don't cheat" guards, e.g. "pod labels unchanged" or "the freeze is still in Git".
+4. `./lab selftest <ID>` must show `broken:ok fixed:ok`. Run it twice, then once after a different
+   scenario.
+
+## What the lab deliberately does NOT do
+
+- No hypervisor tricks from inside the lab: `./lab` never controls VirtualBox, so every fault is in-guest.
+- No hidden state on the nodes: the golden baseline lives on the desktop (`.state/golden`).
+- No grading of *how* you fixed it, unless the ticket forbids a shortcut (then a guard check).

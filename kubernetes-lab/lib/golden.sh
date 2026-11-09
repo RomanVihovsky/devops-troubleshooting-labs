@@ -107,6 +107,21 @@ reset_gw() {
 }
 
 # enable too: a scenario may have disabled kubelet, which would bite at the next reboot
+# reset_gitops_baseline: lab/gitops main back to the tag "baseline" (a normal force-push through Gitea, so its
+# branch view stays right), then Argo CD re-reads it and re-syncs the apps
+reset_gitops_baseline() {
+  local w url a; w=$(mktemp -d)
+  url="http://lab:$(cat "$GITEA_DIR/token")@192.168.56.20:3000/lab/gitops.git"
+  if ! { git -C "$w" init -q && git -C "$w" fetch -q "$url" refs/tags/baseline \
+         && git -C "$w" push -q --force "$url" FETCH_HEAD:refs/heads/main 2>/dev/null; }; then
+    rm -rf "$w"; warn "gitops: main not reset"; return 1
+  fi
+  rm -rf "$w"
+  argo_refresh lab-apps; argo_sync lab-apps
+  for a in demo shop; do argo_refresh "$a"; done
+  for a in lab-apps demo shop; do retry 180 argo_app_ok "$a" || warn "argo app $a not Synced/Healthy after the GitOps reset"; done
+}
+
 start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl enable --now containerd kubelet 2>/dev/null' </dev/null; done; }
 
 # cluster_reset [cluster | node <names...>]

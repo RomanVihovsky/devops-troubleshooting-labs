@@ -1,0 +1,301 @@
+# shellcheck shell=bash disable=SC2029,SC2016,SC2034,SC2153
+# The scenario framework: list/start/ticket/hint/verify/solution/solve/reset/stop/status/diff/selftest
+# (house style of ../ansible-lab) + the helpers that scenario scripts use. A scenario is
+# scenarios/<ID>-kebab/ (or learn/T..): scenario.yaml, ticket.md, hints.md, [manifests/], .lab/{setup,verify,
+# solve}.sh + solution.md. Before a lab starts, the previous one is cleaned up at ITS reset level
+# (scenario.yaml reset: ns|node|gw|cluster) - see docs/FAULTS.md.
+
+WS="$LAB_DIR/workspace"
+LAB_LABEL=lab.k8slab/scenario
+SETUP_LOG="$STATE_DIR/setup.log"
+SELFTEST_LOG="$STATE_DIR/selftest.log"
+
+# ------------------------------------------------------------ discovery ----
+all_labs() { local d; for d in "$LEARN_DIR"/*/ "$SCEN_DIR"/*/; do [ -f "$d/scenario.yaml" ] && echo "${d%/}"; done; }
+yget()  { sed -n "s/^$1: *//p" "$2/scenario.yaml" | head -1 | sed 's/ *#.*//'; }
+ylist() { yget "$1" "$2" | tr -d '[],'; }
+lab_dir() {
+  local id=$1 d u
+  for d in "$LEARN_DIR/$id" "$SCEN_DIR/$id"; do [ -d "$d" ] && { echo "$d"; return; }; done
+  u=${id^^}
+  for d in "$LEARN_DIR/$u"-* "$SCEN_DIR/$u"-*; do [ -d "$d" ] && { echo "$d"; return; }; done
+  die "no such lab: $1 (see ./lab list)"
+}
+current() { [ -f "$STATE_DIR/current" ] || die "no lab running - ./lab start <id>"; echo "$LAB_DIR/$(cat "$STATE_DIR/current")"; }
+
+cmd_list() {
+  local filter=${1:-} dom=${2:-} d name id kind lvl title mark cur last=""
+  cur=$(cat "$STATE_DIR/current" 2>/dev/null || true)
+  while read -r d; do
+    name=$(basename "$d"); id=$(yget id "$d"); kind=$(yget kind "$d"); lvl=$(yget level "$d")
+    case $filter in
+      --learn) [ "$kind" = learn ] || continue ;;
+      --incidents) [ "$kind" = incident ] || continue ;;
+      --domain) [ "${id:0:1}" = "${dom^^}" ] || continue ;;
+    esac
+    if [ "$kind" != "$last" ]; then
+      echo; if [ "$kind" = learn ]; then echo "${C_BOLD}Learn track${C_0}"; else echo "${C_BOLD}Incidents${C_0}"; fi
+      last=$kind
+    fi
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
+    [ "$cur" = "$(rel "$d")" ] && mark="${C_Y}▶${C_0}"
+    printf ' %s %-5s %-4s %-8s %s\n' "$mark" "$id" "$(printf '%*s' "${lvl:-1}" '' | sed 's/ /•/g')" "$(yget reset "$d")" "$title"
+  done < <(all_labs)
+  echo
+}
+
+# ---------------------------------------------------------- script runner ----
+# run_lab_script <script> <dir> [bash flags]: a scenario script in a subshell with the lab libraries loaded
+run_lab_script() {
+  local script=$1 dir=$2 flags=${3:--euo pipefail}
+  # shellcheck disable=SC2086
+  SCN="$(dirname "$(dirname "$script")")" LAB_DIR="$LAB_DIR" LAB_ID="${LAB_ID:-}" bash $flags -c '
+    source "$LAB_DIR/lib/common.sh"; source "$LAB_DIR/lib/vm.sh"; source "$LAB_DIR/lib/cluster.sh"
+    source "$LAB_DIR/lib/upgrade.sh"; source "$LAB_DIR/lib/golden.sh"; source "$LAB_DIR/lib/gitops.sh"
+    source "$LAB_DIR/lib/scenario.sh"
+    if [ -f "$STATE_DIR/scenario.env" ]; then set -a; source "$STATE_DIR/scenario.env"; set +a; fi
+    cd "$2" && source "$1"' _ "$script" "$dir"
+}
+
+# --------------------------------------------------------------- helpers ----
+# kns <ns>...: namespaces owned by the running scenario (deleted by its cleanup)
+kns() { local n; for n in "$@"; do kx create namespace "$n" --dry-run=client -o yaml | ka -f -; done; }
+# ka -f <file|->: kubectl apply with the scenario label on every object (pod templates untouched).
+# (Not "kubectl label --local -o yaml": for a multi-document file it prints the objects without "---".)
+ka() {
+  [ "${1:-}" = -f ] || die "usage: ka -f <file|->"
+  local src=${2:--}; [ "$src" = - ] && src=/dev/stdin
+  python3 -c '
+import sys, yaml
+key, val = sys.argv[1], sys.argv[2]
+def label(o):
+    if o.get("kind", "").endswith("List") and "items" in o:
+        for i in o["items"]: label(i)
+    else:
+        o.setdefault("metadata", {}).setdefault("labels", {})[key] = val
+docs = [d for d in yaml.safe_load_all(sys.stdin) if d]
+for d in docs: label(d)
+yaml.safe_dump_all(docs, sys.stdout, sort_keys=False)' "$LAB_LABEL" "$LAB_ID" < "$src" | kx apply -f - >/dev/null
+}
+wait_rollout() { kx -n "$1" rollout status "$2" --timeout="${3:-180}s" >/dev/null; }
+restarts() { kx -n "$1" get pods -l "$2" -o jsonpath='{range .items[*]}{.status.containerStatuses[*].restartCount}{" "}{end}' | awk '{ for (i = 1; i <= NF; i++) s += $i } END { print s + 0 }'; }
+# stable_for <seconds> <ns> <selector>: pods Ready and no new restarts during that time
+stable_for() {
+  local t=$1 ns=$2 sel=$3 r0
+  [ -n "${LAB_EXPECT_FAIL:-}" ] && t=3
+  kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=60s >/dev/null 2>&1 || return 1
+  r0=$(restarts "$ns" "$sel"); sleep "$t"
+  [ "$(restarts "$ns" "$sel")" = "$r0" ] && kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=5s >/dev/null 2>&1
+}
+# http_code <ns> <url> [header]: HTTP status seen from inside the cluster (a throwaway busybox pod in <ns>)
+http_code() {
+  local ns=$1 url=$2 hdr=${3:-} pod="lab-probe-$RANDOM" out
+  out=$(kx -n "$ns" run "$pod" --rm -i --restart=Never --quiet --image="$BUSYBOX_IMAGE" \
+        --labels="$LAB_LABEL=${LAB_ID:-probe}" --command -- \
+        sh -c "wget -S -q -O /dev/null -T 5 ${hdr:+--header '$hdr'} '$url' 2>&1 | awk '/HTTP\\//{c=\$2} END{print c+0}'" 2>/dev/null)
+  echo "${out:-0}" | tail -1
+}
+http_ok() { [ "$(http_code "$@")" = 200 ]; }
+# http_out <url> [Host]: HTTP status from this desktop (LB 192.168.56.200, NodePorts)
+http_out() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 ${2:+-H "Host: $2"} "$1"; }
+can_i() { local as=$1; shift; [ "$(kx auth can-i --as "$as" "$@" 2>/dev/null)" = yes ]; }
+# fault_partition <node> / fault_clear <node>: cut a node off the cluster network, keep the desktop's SSH
+# (it arrives from 192.168.56.1 through the host). Egress matched in POSTROUTING (see docs/FAULTS.md).
+fault_partition() {
+  nx "$1" 'nft -f - <<EOF
+table inet lab_fault
+delete table inet lab_fault
+table inet lab_fault {
+  chain in { type filter hook input priority 0; policy accept;
+    ip saddr 192.168.56.1 accept
+    ip saddr 192.168.56.0/24 drop
+  }
+  chain out { type filter hook postrouting priority 200; policy accept;
+    ip daddr 192.168.56.1 accept
+    ip daddr 192.168.56.0/24 drop
+  }
+}
+EOF' </dev/null
+}
+fault_clear() { nx "$1" 'nft delete table inet lab_fault 2>/dev/null; true' </dev/null; }
+# gitops_commit "<message>" [author]: run the snippet on stdin inside a fresh clone of lab/gitops, push as a colleague
+gitops_commit() {
+  local msg=$1 who=${2:-dev-bob} w; w=$(mktemp -d)
+  git clone -q "http://lab:$(cat "$GITEA_DIR/token")@192.168.56.20:3000/lab/gitops.git" "$w"
+  (cd "$w" && bash -euo pipefail)
+  git -C "$w" add -A
+  git -C "$w" -c user.name="$who" -c user.email="$who@k8s.lab" commit -qm "$msg"
+  git -C "$w" push -q origin main 2>/dev/null
+  rm -rf "$w"
+}
+argo_refresh() { kx -n argocd annotate application "$1" argocd.argoproj.io/refresh=hard --overwrite >/dev/null; }
+argo_sync() { kx -n argocd patch application "$1" --type merge -p '{"operation":{"sync":{"revision":"main","prune":true}}}' >/dev/null; }
+
+# ---------------------------------------------------------------- cleanup ----
+# scenario_cleanup <lab dir>: undo what that lab may have changed, at its declared reset level
+scenario_cleanup() {
+  local d=$1 id level ns nodes kinds
+  id=$(yget id "$d"); level=$(yget reset "$d"); level=${level:-ns}
+  case $level in
+    cluster) cluster_reset cluster >/dev/null || return 1; return 0 ;;
+    ns|node|gw) ;;
+    *) die "$(basename "$d"): unknown reset level '$level'" ;;
+  esac
+  ns=$(ylist namespaces "$d")
+  # shellcheck disable=SC2086
+  [ -z "$ns" ] || kx delete namespace $ns --ignore-not-found --wait=false >/dev/null 2>&1
+  kinds=$(kx api-resources --verbs=list,delete -o name 2>/dev/null | grep -vE '^(events|events.events.k8s.io|namespaces)$' | paste -sd,)
+  kx delete "$kinds" -A -l "$LAB_LABEL=$id" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  if [ -n "$ns" ]; then
+    # shellcheck disable=SC2086
+    kx wait --for=delete namespace $ns --timeout=120s >/dev/null 2>&1 || warn "namespace(s) $ns still terminating"
+  fi
+  if [ "$level" = node ]; then
+    nodes=$(ylist nodes "$d")
+    for n in $nodes; do n=$(node_name "$n"); reset_node_files "$n" </dev/null; start_kubelets "$n"; done
+  fi
+  [ "$level" = gw ] && reset_gw </dev/null
+  [ "$(yget gitops "$d")" = true ] && reset_gitops_baseline
+  return 0
+}
+
+# ------------------------------------------------------------- lifecycle ----
+cmd_stop() {
+  local d
+  if [ -f "$STATE_DIR/current" ]; then
+    d=$(current)
+    info "cleaning up $(basename "$d") (reset: $(yget reset "$d"))"
+    scenario_cleanup "$d" || warn "cleanup of $(basename "$d") failed"
+  fi
+  rm -rf "${WS:?}"/*/ 2>/dev/null; mkdir -p "$WS"
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR"/scenario.* "$SETUP_LOG"
+}
+
+show_ticket() {
+  echo; md "$1/ticket.md"
+  cat <<EOF
+
+${C_BOLD}Work${C_0}: eval "\$(./lab env)" (kubectl, helm, argocd, kubeseal, bao) · ./lab node <n> · workspace/$(yget id "$1")/
+${C_BOLD}Check${C_0}: ./lab verify   ${C_BOLD}Stuck?${C_0} ./lab hint
+EOF
+}
+
+cmd_start() {
+  local d name id
+  [ $# -ge 1 ] || die "usage: ./lab start <id|random>"
+  ensure_tools
+  if [ "$1" = random ]; then d=$(all_labs | while read -r x; do [ "$(yget kind "$x")" = incident ] && echo "$x"; done | shuf -n1)
+  else d=$(lab_dir "$1"); fi
+  name=$(basename "$d"); id=$(yget id "$d")
+  cmd_stop
+  if ! cluster_quick; then
+    warn "the cluster is not in its baseline shape - cluster reset"
+    cluster_reset cluster >/dev/null || die "cluster reset failed - ./lab cluster doctor"
+    cluster_quick || die "cluster still unhealthy after a reset - ./lab cluster doctor"
+  fi
+  if [ "$1" = random ]; then info "Starting a random incident..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
+  rel "$d" > "$STATE_DIR/current"
+  mkdir -p "$WS/$id"
+  [ -d "$d/manifests" ] && cp -a "$d/manifests/." "$WS/$id/"
+  git -C "$WS/$id" init -q 2>/dev/null; git -C "$WS/$id" add -A
+  git -C "$WS/$id" -c user.name=lab -c user.email=lab@k8s.lab commit -qm "as found" --allow-empty
+  [ "$(yget gitops "$d")" = true ] && gitops_clone >/dev/null
+  : > "$SETUP_LOG"
+  export LAB_ID=$id
+  if [ -f "$d/.lab/setup.sh" ]; then
+    run_lab_script "$d/.lab/setup.sh" "$WS/$id" >> "$SETUP_LOG" 2>&1 || { tail -15 "$SETUP_LOG" >&2; die "setup failed (log: .state/setup.log)"; }
+  fi
+  remember started "$(date +%s)"
+  show_ticket "$d"
+}
+
+cmd_ticket() { show_ticket "$(current)"; }
+
+cmd_hint() {
+  local d n total
+  d=$(current); total=$(grep -c '^## ' "$d/hints.md")
+  if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
+  [ "$n" -gt "$total" ] && n=$total
+  echo "$n" > "$STATE_DIR/hint"
+  echo "${C_BOLD}Hint $n/$total${C_0}"
+  awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
+  [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
+  return 0
+}
+
+cmd_verify() {
+  local d rc=0
+  d=$(current); export LAB_ID; LAB_ID=$(yget id "$d")
+  info "Verifying $(basename "$d")"
+  # house rule: verify runs with -u but WITHOUT pipefail (kubectl | grep -q races)
+  KX_TIMEOUT=10s run_lab_script "$d/.lab/verify.sh" "$WS/$LAB_ID" "-u" || rc=$?
+  if [ $rc -eq 0 ] && [ -z "${LAB_SELFTEST:-}" ]; then
+    grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+  fi
+  return $rc
+}
+
+cmd_solution() {
+  local d a; d=$(current)
+  if [ -t 0 ] && [ "${1:-}" != -y ]; then
+    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    [[ $a =~ ^[yY] ]] || exit 0
+  fi
+  md "$d/.lab/solution.md"
+}
+
+cmd_solve() {
+  local d; d=$(current); export LAB_ID; LAB_ID=$(yget id "$d")
+  info "Applying the reference fix for $(basename "$d")"
+  run_lab_script "$d/.lab/solve.sh" "$WS/$LAB_ID"
+}
+
+cmd_reset() { local d; d=$(current); cmd_start "$(basename "$d")"; }
+
+cmd_diff() {
+  local d id; d=$(current); id=$(yget id "$d")
+  git -C "$WS/$id" -c color.ui=always diff HEAD -- . || true
+  git -C "$WS/$id" status --short --untracked-files=all | grep '^??' || true
+}
+
+cmd_status() {
+  if [ -f "$STATE_DIR/current" ]; then
+    local d; d=$(current)
+    echo "lab: $(basename "$d") (reset: $(yget reset "$d"), started $(( ($(date +%s) - $(recall started)) / 60 )) min ago, hints used: $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0))"
+  else
+    echo "lab: none"
+  fi
+}
+
+# --------------------------------------------------------------- selftest ----
+cmd_selftest() {
+  local targets=() d name t0 broken fixed results=() sel=${1:-all}
+  case $sel in
+    all) mapfile -t targets < <(all_labs) ;;
+    learn|incidents) while read -r d; do [ "$(yget kind "$d")" = "${sel%s}" ] && targets+=("$d"); done < <(all_labs) ;;
+    pilots) while read -r d; do [ "$(yget pilot "$d")" = true ] && targets+=("$d"); done < <(all_labs) ;;
+    wave*) while read -r d; do [ "$(yget wave "$d")" = "${sel#wave}" ] && targets+=("$d"); done < <(all_labs) ;;
+    *) for d in "$@"; do targets+=("$(lab_dir "$d")"); done ;;
+  esac
+  [ ${#targets[@]} -gt 0 ] || die "nothing to test for '$sel'"
+  export LAB_SELFTEST=1
+  # every result line also goes to .state/selftest.log as it happens (survives a killed run / a reboot)
+  echo "== $(date -u +%FT%TZ) selftest ${*:-all}" >> "$SELFTEST_LOG"
+  for d in "${targets[@]}"; do
+    name=$(basename "$d"); t0=$SECONDS
+    echo; info "${C_BOLD}selftest $name${C_0}"
+    if ! ( cmd_start "$name" ) >/dev/null; then
+      results+=("$(printf '%-36s SETUP FAILED %5ss' "$name" $((SECONDS - t0)))"); echo "  ${results[-1]}" >> "$SELFTEST_LOG"; continue
+    fi
+    broken=ok; ( LAB_EXPECT_FAIL=1 cmd_verify ) >/dev/null 2>&1 && broken="NOT BROKEN"
+    ( cmd_solve ) >/dev/null 2>&1 || true
+    fixed=ok; ( cmd_verify ) || fixed="NOT FIXED"
+    results+=("$(printf '%-36s broken:%-10s fixed:%-10s %5ss' "$name" "$broken" "$fixed" $((SECONDS - t0)))")
+    echo "  ${results[-1]}" >> "$SELFTEST_LOG"
+  done
+  cmd_stop
+  echo "== $(date -u +%FT%TZ) done" >> "$SELFTEST_LOG"
+  echo; echo "${C_BOLD}Selftest results${C_0}"; printf '  %s\n' "${results[@]}"
+  printf '%s\n' "${results[@]}" | grep -qE 'NOT |FAILED' && return 1 || return 0
+}

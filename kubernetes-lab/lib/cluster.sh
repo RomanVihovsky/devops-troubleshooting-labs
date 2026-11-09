@@ -10,7 +10,8 @@ export PATH="$BIN_DIR:$PATH"
 CP=k8s-cp1
 ADDONS="$LAB_DIR/infra/addons"
 
-kx() { kubectl "$@"; }
+# KX_TIMEOUT (e.g. 10s, set for verify) bounds every API request - a dead API must not hang a check
+kx() { kubectl ${KX_TIMEOUT:+--request-timeout="$KX_TIMEOUT"} "$@"; }
 workers() { node_rows | awk '$7 == "worker" { print $1 }'; }
 cluster_nodes() { node_rows | awk '$7 == "control-plane" || $7 == "worker" { print $1 }'; }
 zone_of() { case $1 in k8s-w3) echo zone-b ;; *) echo zone-a ;; esac; }
@@ -160,6 +161,16 @@ addons_install() {
   helm_up csi-driver-nfs kube-system "$(gw_file "csi-driver-nfs-$CSI_NFS_CHART_VERSION.tgz")" "$ADDONS/nfs-values.yaml"
   kx apply -f "$ADDONS/storage.yaml" >/dev/null
   ok "addons installed"
+}
+
+# cluster_quick: the cheap health check between labs (nodes, system pods, Argo CD apps) - not the full doctor
+cluster_quick() {
+  retry 120 kx get --raw /readyz || return 1
+  retry 120 nodes_ready || return 1
+  retry 120 system_pods_ok || return 1
+  if kx get namespace argocd >/dev/null 2>&1; then
+    local a; for a in lab-apps demo shop; do retry 180 argo_app_ok "$a" || return 1; done
+  fi
 }
 
 # ---------------------------------------------------------------- doctor ----

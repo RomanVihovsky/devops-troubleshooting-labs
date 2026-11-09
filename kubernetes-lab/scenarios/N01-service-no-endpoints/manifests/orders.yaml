@@ -1,0 +1,63 @@
+# orders: frontend -> backend (labapp). Deployed by the orders team after the "label cleanup" release.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: orders
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: back-end}
+  template:
+    metadata:
+      labels: {app: back-end, tier: api}
+    spec:
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: orders-api}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /ready, port: http}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: orders
+spec:
+  selector: {app: backend}
+  ports:
+    - {name: http, port: 80, targetPort: http}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: orders
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: frontend}
+  template:
+    metadata:
+      labels: {app: frontend, tier: web}
+    spec:
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: orders-web}
+            - {name: UPSTREAM_URL, value: http://backend/items}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: orders
+spec:
+  selector: {app: frontend}
+  ports:
+    - {name: http, port: 80, targetPort: http}

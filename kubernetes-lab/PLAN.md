@@ -366,3 +366,59 @@ Settled on 2026-11-08 by the v2 decisions above.
     To clean up: `k8slab.bat snapshot baseline gw`.
 - **Phase 2: DONE (2026-11-09).** Next: Phase 3 - the scenario framework (start/verify/hint/solve/
   selftest, reset ladder per scenario) and 4 pilots.
+
+### Phase 3 (2026-11-09): scenario framework + 4 pilots
+
+- **Framework** (`lib/scenario.sh`, `lab`), in the house style of ansible-lab:
+  - commands: `list`, `start`, `ticket`, `hint`, `verify`, `solution`, `solve`, `reset`, `stop`, `status`,
+    `diff`, `selftest <id..|pilots|waveN|learn|all>`;
+  - `workspace/<ID>/` holds the "as found" git copy, `workspace/gitops` the student's clone.
+  - Selftest result lines are appended to `.state/selftest.log` as they happen.
+  - Helpers, all documented in [docs/FAULTS.md](docs/FAULTS.md):
+    - `kns`/`ka`: everything labelled `lab.k8slab/scenario=<ID>`;
+    - `http_code`/`http_ok` (from inside the cluster), `http_out` (from the desktop);
+    - `restarts`/`stable_for`, `can_i`, `fault_partition`/`fault_clear`;
+    - `gitops_commit` (as `dev-bob`), `argo_refresh`/`argo_sync`.
+  - `verify` runs with a 10-s API timeout, so a dead API fails a check instead of hanging it.
+- **Reset ladder per scenario** (`scenario.yaml reset:`), run before the next lab starts:
+  - `ns`: namespaces + labelled objects;
+  - `node`: + golden files/runtime faults on `nodes:`;
+  - `gw`: + gw data;
+  - `cluster`: etcd restore + every node + gw;
+  - `gitops: true` adds: `baseline` → `main`, then Argo CD re-sync until Synced + Healthy.
+  - Then `cluster_quick`: API, nodes, system pods, Argo apps. If it fails, `start` escalates to a full
+    `cluster reset`.
+- **Pilots**:
+  - N01 (ns): Service selector vs pod label;
+  - L01 (node): kubelet disabled on w2;
+  - K01 (cluster): apiserver `--etcd-servers` port typo;
+  - D02 (ns + GitOps): drift during a self-heal-off change freeze.
+- **Fixes on the way**:
+  - `kubectl label --local -o yaml` prints a multi-document file without the `---` separators, so `ka`
+    labels with a small Python YAML filter instead.
+  - The first selftest died with the desktop: it rebooted at 15:03, and the output in `/tmp` went with it.
+    Results now go to `.state/selftest.log` line by line.
+  - D02 showed `fixed:NOT FIXED` on the next run. Its reference fix synced the app, but the hand-added env var
+    `GREETING` was still there, and Argo CD reported Synced + Healthy. A field Git never declared is not
+    drift for the three-way merge, so neither a sync nor self-heal removes it. That is now the scenario's
+    second layer: the student has to find and remove it. Hint 3, the solution and solve.sh were updated.
+- **Timings** (3 full runs; each lab's time includes the cleanup of the lab before it):
+  - D02 18-30 s;
+  - K01 55-68 s;
+  - L01 223-240 s (K01's cleanup is a `cluster reset` + doctor, ≈ 2 min);
+  - N01 50-169 s (L01's node reset, then a fresh namespace and image pulls);
+  - a whole pilot run takes 6-8.5 min.
+- **Gate: PASSED.**
+  - After the D02 fix, `./lab selftest pilots` passed twice in a row: 16:40-16:48 and 16:48-16:54 UTC, all 4
+    `broken:ok fixed:ok`.
+  - Then `./lab cluster doctor` PASS (38 s); `./lab status` → none.
+  - The reset levels ns, ns + GitOps, node and cluster all ran between the runs (no pilot uses `gw`).
+- **Phase 3: DONE (2026-11-09).** Next: Phase 4, the learn track (T01-T16, `learn/`). These framework gaps
+  surfaced in review and are needed by wave 1/2:
+  - an ns-level OpenBao kv restore, for the Y scenarios;
+  - a `rebuild` reset level and a `version:` key, for K13 (upgrade from 1.36);
+  - a `curl_matrix` helper, for the X scenarios;
+  - CATALOG rows still say `labapp`, `envs/dev|prod` and `payments`, but the live repo has `demo`/`shop` and
+    `envs/<app>`;
+  - PLAN §2.1/§2.3 still describe docker-ce, dnsmasq and apt-cacher-ng; the gw is Docker-free (nginx, CoreDNS
+    `lab` zone).

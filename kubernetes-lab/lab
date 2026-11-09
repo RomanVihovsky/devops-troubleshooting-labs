@@ -15,43 +15,58 @@ source "$LAB_DIR/lib/upgrade.sh"
 source "$LAB_DIR/lib/golden.sh"
 # shellcheck source=lib/gitops.sh
 source "$LAB_DIR/lib/gitops.sh"
+# shellcheck source=lib/scenario.sh
+source "$LAB_DIR/lib/scenario.sh"
 
 usage() {
   cat <<EOF
-${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0: the VMs)
+${C_BOLD}kubernetes-lab${C_0} - break/fix on a real kubeadm cluster (v$K8S_VERSION) in VirtualBox VMs, GitOps + secrets
 
-  ./lab vm check              this desktop VM: host-only address, SSH key, kit, shared folder
-  ./lab vm kit                build the VirtualBox kit (k8slab.bat/.sh, nodes.csv, seed.iso) and
-                              copy it to the shared folder - then on Windows: k8slab.bat create
-  ./lab vm seedtest [node]    boot the seed under QEMU software emulation and check it (~5-10 min)
-  ./lab vm wait [nodes]       wait until the VMs answer SSH with the right hostname and IP
-  ./lab vm status             uptime, memory and disk of every node
-  ./lab vm provision gw|nodes|all   install the gateway services / the Kubernetes node bits (idempotent)
-  ./lab vm offline on|off     cut / restore the VMs' internet (NAT) - the cluster must keep working
-
-  ./lab cluster build         kubeadm init + join + addons at the build version ($K8S_BUILD_VERSION), then doctor
-  ./lab cluster upgrade <minor>   the kubeadm upgrade procedure, e.g. ./lab cluster upgrade ${K8S_VERSION%.*}
-  ./lab cluster doctor        end-to-end health check (nodes, pods, pod network, DNS, LB, Ingress, storage)
-  ./lab cluster golden        save the reset baseline (node files, etcd snapshot, gw configs) on this desktop
-  ./lab cluster reset [cluster | node <node..>]   back to the golden, in-guest (2-3 min for cluster)
-  ./lab cluster rebuild       last resort: kubeadm reset everywhere, build, upgrade, new golden (~15 min)
-
-  ./lab gitops gw             lab CA, OpenBao (TLS, auto-unseal, kv) and Gitea (repo lab/gitops) on k8s-gw
-  ./lab gitops stack          Sealed Secrets, External Secrets (+ store "openbao"), Argo CD (http://$ARGOCD_LB_IP)
-  ./lab gitops seed           push the baseline repo (charts, apps, envs) to Gitea, apply the root app
-  ./lab gitops clone          workspace/gitops - your clone of lab/gitops
-  ./lab images build          labapp image tags -> registry.lab:5000/lab/labapp
-  eval "\$(./lab env)"         kubectl / helm for the lab cluster in this shell
-  ./lab vm soak [minutes]     load every node (default 30 min) and check none stops answering
+${C_BOLD}Labs${C_0}
+  ./lab list [--learn|--incidents|--domain X]   labs (✔ solved, ▶ running) with level and reset scope
+  ./lab start <id|random>     clean up the previous lab, broken on purpose, prints the ticket
+  ./lab ticket | hint [n]     the ticket again / the next progressive hint
+  ./lab verify                PASS / FAIL against the ticket's Test
+  ./lab solution [-y] | solve root cause + fix (spoiler) / apply the reference fix
+  ./lab diff                  your changes in workspace/<ID>/ since "as found"
+  ./lab reset | stop | status start the lab again / clean up / what's running
+  ./lab selftest <id..|pilots|waveN|learn|all>   start -> verify FAIL -> solve -> verify PASS
+  eval "\$(./lab env)"         kubectl, helm, argocd, kubeseal, bao, sops for the lab cluster in this shell
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
+
+${C_BOLD}Cluster${C_0}
+  ./lab cluster doctor        end-to-end health check (31 checks incl. GitOps & secrets)
+  ./lab cluster reset [cluster | node <node..>]   back to the golden baseline, in-guest (~1 min)
+  ./lab cluster golden        save the reset baseline (node files, etcd snapshot, gw data) on this desktop
+  ./lab cluster build | upgrade <minor> | rebuild   kubeadm build at $K8S_BUILD_VERSION / upgrade / from scratch
+
+${C_BOLD}GitOps & secrets${C_0}
+  ./lab gitops gw | stack | seed | clone   OpenBao + Gitea / Sealed Secrets, ESO, Argo CD / repo / your clone
+  ./lab images build          labapp image tags -> registry.lab:5000/lab/labapp
+  Argo CD UI: http://$ARGOCD_LB_IP (admin, .state/argocd/admin-password)   Gitea: http://192.168.56.20:3000
+
+${C_BOLD}VMs${C_0}
+  ./lab vm check | kit | seedtest | wait | status | provision gw|nodes | offline on|off | soak [min]
   ./lab health [start|stop|N] desktop health log while the VMs work
+  Snapshots, start/stop and deleting VMs happen on the VirtualBox host: k8slab.bat status|stop|snapshot|restore
 
 Nodes: $(node_rows | awk '{printf "%s(%s) ", $1, $4}')
-Snapshots, start/stop and deleting VMs happen on the VirtualBox host: k8slab.bat status|stop|snapshot|restore
 EOF
 }
 
 case "${1:-help}" in
+  list) shift; cmd_list "$@" ;;
+  start) shift; cmd_start "$@" ;;
+  ticket) cmd_ticket ;;
+  hint) shift; cmd_hint "$@" ;;
+  verify) ensure_tools; cmd_verify ;;
+  solution) shift; cmd_solution "$@" ;;
+  solve) ensure_tools; cmd_solve ;;
+  reset) cmd_reset ;;
+  stop) ensure_tools; cmd_stop ;;
+  status) cmd_status ;;
+  diff) cmd_diff ;;
+  selftest) shift; ensure_tools; cmd_selftest "$@" ;;
   vm)
     sub=${2:-check}; shift 2 || shift $#
     case $sub in

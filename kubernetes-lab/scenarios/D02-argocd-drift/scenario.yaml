@@ -1,0 +1,11 @@
+id: D02
+title: demo OutOfSync for hours - drift during a change freeze
+kind: incident
+level: 2
+domain: delivery
+wave: 1
+pilot: true
+est: 15m
+reset: ns
+namespaces: []
+gitops: true
