@@ -51,6 +51,15 @@ for up in registry.k8s.io quay.io docker.io ghcr.io; do
   mkdir -p "/etc/containerd/certs.d/$up"
   sed -e "s|@UPSTREAM@|$up|g" -e "s|@SERVER@|$server|g" "$SRC/infra/node/hosts.toml.tpl" > "/etc/containerd/certs.d/$up/hosts.toml"
 done
+# the lab's own images (registry.lab:5000/lab/...) - plain HTTP, so containerd must not try HTTPS
+mkdir -p /etc/containerd/certs.d/registry.lab:5000
+cat > /etc/containerd/certs.d/registry.lab:5000/hosts.toml <<'EOF'
+# the lab registry on k8s-gw is plain HTTP
+server = "http://registry.lab:5000"
+
+[host."http://registry.lab:5000"]
+  capabilities = ["pull", "resolve"]
+EOF
 systemctl daemon-reload
 systemctl enable containerd >/dev/null 2>&1
 systemctl restart containerd
@@ -66,7 +75,9 @@ apt-get update -qq -o Dir::Etc::SourceList=sources.list.d/k8slab.list -o Dir::Et
   -o APT::Get::List-Cleanup=0
 kver=$(apt-cache madison kubeadm | awk -v v="$K8S_BUILD_VERSION-" '!f && index($3, v) == 1 { print $3; f = 1 }')
 [ -n "$kver" ] || die "kubeadm $K8S_BUILD_VERSION not in the gw apt repo"
-if [ "$(dpkg-query -W -f '${Version}' kubeadm 2>/dev/null)" != "$kver" ] && [ -f /etc/kubernetes/admin.conf ]; then
+# a node that already joined a cluster (kubelet.conf exists on every node; admin.conf only on the control
+# plane) keeps its packages - re-provisioning must never up/downgrade a running cluster (./lab cluster upgrade)
+if [ "$(dpkg-query -W -f '${Version}' kubeadm 2>/dev/null)" != "$kver" ] && [ -f /etc/kubernetes/kubelet.conf ]; then
   say "kubeadm already initialised at another version - leaving the packages alone (use ./lab cluster upgrade)"
 else
   apt-mark unhold kubeadm kubelet kubectl >/dev/null 2>&1 || true
