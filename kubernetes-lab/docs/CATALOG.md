@@ -330,21 +330,21 @@ Guided tasks with `./lab verify`, no spoilers needed. "T" because "L" is the nod
 
 | ID | Topic | What you do | Leads into |
 |---|---|---|---|
-| T01 | Lab tour and kit | `k8slab` kit, `./lab vm status`, `./lab node`, `./lab ui`, the reset ladder | all |
+| T01 | Lab tour and kit | `./lab ui`, `./lab env`, `./lab node`, haproxy on gw, the reset ladder; a first Deployment + Service | all |
 | T02 | kubeadm anatomy | static pods, `/etc/kubernetes` + pki, kubelet config, kubeadm-config | K01-K12 |
-| T03 | Join `k8s-w4` by hand | token + CA hash, TLS bootstrap, CSR, labels; remove it cleanly | K15 |
+| T03 | Join `k8s-w3` back by hand | setup drains/deletes/resets w3; token + CA hash, `--node-ip` (NAT trap), serving CSR, zone label | K15 |
 | T04 | Packet path pod → svc → node | Calico routes + VXLAN, kube-proxy rules, conntrack, tcpdump on nodes | N11, N12, X07, L18 |
 | T05 | Storage: local vs NFS RWX | local-path node affinity, nfs-csi RWX, snapshots, reclaim | V01-V10, L11 |
 | T06 | MetalLB + Ingress/Gateway | L2 pool, Traefik Ingress, Gateway + HTTPRoute | G01-G08 |
 | T07 | RBAC + CSR users | Roles, `can-i`, user cert via the CSR API, SA tokens | A01-A08, A12 |
 | T08 | etcd backup/restore | `etcdctl snapshot save`, `etcdutl snapshot restore` | K05, K06, B06 |
-| T09 | kubeadm upgrade | guided 1.36 → 1.37 with drain/uncordon (`rebuild` first) | K13 |
-| T10 | Helm | chart anatomy, values precedence, template/lint, upgrade/rollback, release Secrets | D01, D07, D10, O04, O05 |
+| T09 | kubeadm upgrade | setup: bare 1.36 cluster (`cluster_bare_build`, PKI kept); guided 1.36 → 1.37 with drain/uncordon | K13 |
+| T10 | Helm | chart anatomy, values precedence, template/lint, failed upgrade (`--wait`), rollback, release Secrets | D01, D07, D10, O04, O05 |
 | T11 | Argo CD | Application, sync vs health, auto-sync + self-heal, AppProject, app-of-apps | D02-D12 |
-| T12 | Sealed Secrets | `kubeseal` scopes, key backup and restore | Y01, Y02 |
-| T13 | ESO + OpenBao | kv-v2, kubernetes auth role, SecretStore with `caProvider`, ExternalSecret | Y03-Y08 |
+| T12 | Sealed Secrets | `kubeseal` scopes, key backup, key-loss drill and restore | Y01, Y02 |
+| T13 | ESO + OpenBao | kv-v2, least-privilege policy + kubernetes auth role, namespaced SecretStore with `caProvider`, rotation | Y03-Y08 |
 | T14 | SOPS + age | `.sops.yaml` rules, encrypt/decrypt, `updatekeys` | Y09, Y10 |
-| T15 | NetworkPolicy for a GitOps stack | default-deny + DNS, Argo CD → Gitea, ESO → OpenBao | X09, X10 |
+| T15 | NetworkPolicy for a GitOps stack | default-deny + DNS in shop, app flows, ESO/Argo CD egress incl. the API's post-DNAT endpoint | X09, X10 |
 | T16 | Hardening | encryption at rest, audit policy, PSA | K16, A13, A04 |
 
 ### Totals

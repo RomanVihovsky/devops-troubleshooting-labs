@@ -1,0 +1,9 @@
+id: T03
+title: Join a node by hand - token, CA hash, node IP, serving CSR, labels
+kind: learn
+level: 2
+domain: control-plane
+est: 30m
+reset: cluster
+namespaces: []
+gitops: false

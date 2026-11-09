@@ -1,0 +1,10 @@
+source "$SCN/.lab/facts.sh"
+check "kubelet cgroup driver" answered cgroup_driver "$(f_cgroup_driver)"
+check "kubelet staticPodPath" answered static_pod_path "$(f_static_pod_path)" "$(f_static_pod_path)/"
+check "the file that holds --node-ip" answered node_ip_file "$(f_node_ip_file)"
+check "the kubelet's API server URL" answered kubelet_server "$(f_kubelet_server)"
+check "admin.conf's group" answered admin_group "$(f_admin_group)"
+check "etcd data dir" answered etcd_data_dir "$(f_etcd_data_dir)" "$(f_etcd_data_dir)/"
+check "the year the cluster CA expires" answered ca_expiry_year "$(f_ca_expiry_year)"
+check "service CIDR" answered service_cidr "$(f_service_cidr)"
+verdict

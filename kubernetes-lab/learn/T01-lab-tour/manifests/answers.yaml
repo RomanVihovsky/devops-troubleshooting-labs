@@ -1,0 +1,7 @@
+# T01 answers - fill in what you find; ./lab verify compares them with the live lab
+containerd_version_w2:      # e.g. 1.7.0
+zone_w3:
+argocd_ip:
+api_backend:                # ip:port
+default_storageclass:
+l01_reset:                  # ns | node | gw | cluster

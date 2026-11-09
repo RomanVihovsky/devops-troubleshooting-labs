@@ -119,10 +119,58 @@ reset_gitops_baseline() {
   rm -rf "$w"
   argo_refresh lab-apps; argo_sync lab-apps
   for a in demo shop; do argo_refresh "$a"; done
+  # Applications / AppProjects that are not part of the baseline (created with kubectl, or left behind)
+  for a in $(kx -n argocd get applications.argoproj.io -o name 2>/dev/null); do
+    case ${a##*/} in lab-apps|demo|shop) ;; *) kx -n argocd delete "$a" --wait=false >/dev/null 2>&1 ;; esac
+  done
+  for a in $(kx -n argocd get appprojects.argoproj.io -o name 2>/dev/null); do
+    case ${a##*/} in lab|default) ;; *) kx -n argocd delete "$a" --wait=false >/dev/null 2>&1 ;; esac
+  done
   for a in lab-apps demo shop; do retry 180 argo_app_ok "$a" || warn "argo app $a not Synced/Healthy after the GitOps reset"; done
 }
 
 start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl enable --now containerd kubelet 2>/dev/null' </dev/null; done; }
+
+# cluster_bare_build <version>: a bare cluster (control plane + workers + Calico, no other addons) at an older
+# version - the starting point of the upgrade labs (T09, K13). kubeadm reset everywhere, but cp1 keeps its PKI and
+# kubeconfigs: kubeadm init reuses an existing CA and valid kubeconfigs, so the desktop kubeconfig, OpenBao's
+# kubernetes auth and the golden stay valid. The next "cluster" reset brings back the golden (packages included).
+cluster_bare_build() {
+  local v=${1:-$K8S_BUILD_VERSION} n pids=()
+  ensure_tools
+  info "bare cluster at v$v: kubeadm reset on every node ($CP keeps its PKI)"
+  nx "$CP" 'rm -rf /var/tmp/k8slab-pki && mkdir -p /var/tmp/k8slab-pki && cp -a /etc/kubernetes/pki /etc/kubernetes/*.conf /var/tmp/k8slab-pki/' </dev/null \
+    || die "could not save the PKI on $CP"
+  for n in $(cluster_nodes); do
+    nxi "$n" > /dev/null 2>&1 <<'EOF2' & pids+=($!)
+set -u
+kubeadm reset -f
+rm -rf /etc/cni/net.d/* /var/lib/etcd /etc/kubernetes/kubeadm /var/lib/calico /var/run/calico
+ip link del vxlan.calico 2>/dev/null
+iptables -F; iptables -t nat -F; iptables -t mangle -F; iptables -X; iptables -t nat -X; iptables -t mangle -X
+ipvsadm --clear 2>/dev/null
+true
+EOF2
+  done
+  for n in "${pids[@]}"; do wait "$n" || true; done
+  pids=()
+  for n in $(cluster_nodes); do pkg_install "$n" "$v" kubeadm kubelet kubectl </dev/null & pids+=($!); done
+  for n in "${pids[@]}"; do wait "$n" || die "package downgrade to $v failed"; done
+  nx "$CP" 'mkdir -p /etc/kubernetes && cp -a /var/tmp/k8slab-pki/pki /var/tmp/k8slab-pki/*.conf /etc/kubernetes/ && rm -rf /var/tmp/k8slab-pki' </dev/null
+  info "kubeadm init on $CP (v$v, existing CA)"
+  render "$LAB_DIR/infra/node/kubeadm-init.yaml.tpl" CP="$CP" CP_IP="$(node_ip "$CP")" VERSION="$v" \
+    API_ENDPOINT="$API_ENDPOINT" POD_CIDR="$POD_CIDR" SERVICE_CIDR="$SERVICE_CIDR" \
+    | push_file "$CP" /etc/kubernetes/kubeadm/init.yaml
+  nx "$CP" 'kubeadm init --config /etc/kubernetes/kubeadm/init.yaml' </dev/null > "$STATE_DIR/kubeadm-init.log" 2>&1 \
+    || { tail -20 "$STATE_DIR/kubeadm-init.log"; die "kubeadm init failed - $(rel "$STATE_DIR/kubeadm-init.log")"; }
+  retry 120 kx get --raw /readyz || die "API not up after kubeadm init (the desktop kubeconfig should still be valid)"
+  local -a ws; mapfile -t ws < <(workers)
+  cluster_join "${ws[@]}"
+  for n in $(cluster_nodes); do kx label node "$n" "topology.kubernetes.io/zone=$(zone_of "$n")" --overwrite >/dev/null; done
+  approve_csrs
+  addon_calico
+  ok "bare cluster up: $(kx version -o json | jq -r .serverVersion.gitVersion), $(kx get nodes --no-headers | wc -l) nodes"
+}
 
 # cluster_reset [cluster | node <names...>]
 cluster_reset() {

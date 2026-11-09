@@ -1,0 +1,9 @@
+id: T04
+title: Packet path - pod to Service to pod across nodes (Calico VXLAN, kube-proxy, conntrack)
+kind: learn
+level: 2
+domain: services
+est: 40m
+reset: ns
+namespaces: [t04]
+gitops: false

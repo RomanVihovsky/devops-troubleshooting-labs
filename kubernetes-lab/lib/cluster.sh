@@ -127,7 +127,7 @@ approve_pending_csrs() {
 helm_up() {   # release namespace chart-file values-file
   helm upgrade --install "$1" "$3" -n "$2" --create-namespace -f "$4" --wait --timeout 6m >/dev/null
 }
-addons_install() {
+addon_calico() {
   local f
   info "Calico $CALICO_VERSION (VXLAN)"
   f="$FILES_DIR/calico-lab.yaml"
@@ -136,6 +136,10 @@ addons_install() {
   kx -n kube-system rollout status ds/calico-node --timeout=6m >/dev/null
   kx -n kube-system rollout status deploy/calico-kube-controllers --timeout=4m >/dev/null
   kx wait --for=condition=Ready nodes --all --timeout=4m >/dev/null
+}
+addons_install() {
+  local f
+  addon_calico
 
   info "Gateway API $GATEWAY_API_VERSION CRDs"
   kx apply --server-side --force-conflicts -f "$(gw_file "gateway-api-$GATEWAY_API_VERSION-standard.yaml")" >/dev/null

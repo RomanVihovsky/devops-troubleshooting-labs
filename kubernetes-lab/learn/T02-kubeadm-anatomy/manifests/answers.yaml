@@ -1,0 +1,9 @@
+# T02 answers - ./lab verify compares them with the live cluster
+cgroup_driver:          # kubelet on k8s-w1
+static_pod_path:        # kubelet on k8s-w1
+node_ip_file:           # the file that holds --node-ip on k8s-w1 (full path)
+kubelet_server:         # the server URL in /etc/kubernetes/kubelet.conf on a worker
+admin_group:            # the O= of admin.conf's client certificate
+etcd_data_dir:          # etcd.yaml on k8s-cp1
+ca_expiry_year:         # e.g. 2030
+service_cidr:           # kubeadm-config

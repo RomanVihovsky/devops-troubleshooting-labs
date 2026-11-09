@@ -37,7 +37,7 @@ cmd_list() {
       echo; if [ "$kind" = learn ]; then echo "${C_BOLD}Learn track${C_0}"; else echo "${C_BOLD}Incidents${C_0}"; fi
       last=$kind
     fi
-    title=$(sed -n '1s/^# *//p' "$d/ticket.md")
+    title=$(sed -n '1s/^# *//p' "$d/ticket.md"); title=${title#"$id · "}
     mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
     [ "$cur" = "$(rel "$d")" ] && mark="${C_Y}▶${C_0}"
     printf ' %s %-5s %-4s %-8s %s\n' "$mark" "$id" "$(printf '%*s' "${lvl:-1}" '' | sed 's/ /•/g')" "$(yget reset "$d")" "$title"
@@ -97,6 +97,48 @@ http_code() {
   echo "${out:-0}" | tail -1
 }
 http_ok() { [ "$(http_code "$@")" = 200 ]; }
+# tcp_ok_as <ns> <labels|-> <host:port>: a TCP connect from a throwaway agnhost pod that carries <labels>
+# (k=v,k2=v2) - the NetworkPolicy view of that workload. Exit 0 = connected.
+tcp_ok_as() {
+  local ns=$1 lb=$2 tgt=$3 pod="lab-probe-$RANDOM$RANDOM"
+  [ "$lb" = - ] && lb=""
+  kx -n "$ns" run "$pod" --rm -i --restart=Never --quiet --image="$AGNHOST_IMAGE" \
+    --labels="$LAB_LABEL=${LAB_ID:-probe}${lb:+,$lb}" --command -- /agnhost connect --timeout 3s "$tgt" >/dev/null 2>&1
+}
+# check_reach <<'EOF' ... EOF: one check per row "<ns> <labels|-> <host:port> open|blocked"; the probes run in parallel
+check_reach() {
+  local d ns lb tgt want r i=0 got; local -a rows=()
+  d=$(mktemp -d)
+  while read -r ns lb tgt want; do
+    case $ns in ''|'#'*) continue ;; esac
+    rows+=("$ns $lb $tgt $want"); i=$((i + 1))
+    ( if tcp_ok_as "$ns" "$lb" "$tgt"; then echo open; else echo blocked; fi > "$d/$i" ) &
+  done
+  wait
+  i=0
+  for r in "${rows[@]}"; do
+    i=$((i + 1)); read -r ns lb tgt want <<<"$r"; got=$(cat "$d/$i" 2>/dev/null)
+    check "$ns ${lb/#-/(any pod)} -> $tgt: $want" test "$got" = "$want"
+  done
+  rm -rf "$d"
+}
+# answer <key>: the student's finding from workspace/<ID>/answers.yaml (trimmed, lower case, "" if missing);
+# answered <key> <truth> [alternative...]: it matches the live value or an accepted spelling (case-insensitive)
+answer() {
+  python3 -c 'import sys, yaml
+try: d = yaml.safe_load(open(sys.argv[1])) or {}
+except Exception: d = {}
+v = d.get(sys.argv[2]) if isinstance(d, dict) else None
+print("" if v is None else str(v).strip().lower())' "$WS/$LAB_ID/answers.yaml" "$1" 2>/dev/null
+}
+answered() {
+  local a t; a=$(answer "$1"); shift
+  for t in "$@"; do
+    t=${t#"${t%%[![:space:]]*}"}; t=${t%"${t##*[![:space:]]}"}
+    [ -n "$t" ] && [ "$a" = "${t,,}" ] && return 0
+  done
+  return 1
+}
 # http_out <url> [Host]: HTTP status from this desktop (LB 192.168.56.200, NodePorts)
 http_out() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 ${2:+-H "Host: $2"} "$1"; }
 can_i() { local as=$1; shift; [ "$(kx auth can-i --as "$as" "$@" 2>/dev/null)" = yes ]; }
@@ -137,11 +179,19 @@ argo_sync() { kx -n argocd patch application "$1" --type merge -p '{"operation":
 scenario_cleanup() {
   local d=$1 id level ns nodes kinds
   id=$(yget id "$d"); level=$(yget reset "$d"); level=${level:-ns}
+  # optional hook for leftovers outside the ladder (cluster-scoped objects such as CSRs or Retain PVs)
+  if [ -f "$d/.lab/cleanup.sh" ] && [ "$level" != cluster ]; then
+    local wd="$WS/$id"; [ -d "$wd" ] || wd=$LAB_DIR
+    LAB_ID=$id run_lab_script "$d/.lab/cleanup.sh" "$wd" "-u" || warn "$(basename "$d"): cleanup.sh failed"
+  fi
   case $level in
     cluster) cluster_reset cluster >/dev/null || return 1; return 0 ;;
     ns|node|gw) ;;
     *) die "$(basename "$d"): unknown reset level '$level'" ;;
   esac
+  # GitOps first: while the scenario's apps are still in Git (and self-healing), Argo CD would re-create the
+  # namespaces we are about to delete
+  [ "$(yget gitops "$d")" = true ] && reset_gitops_baseline
   ns=$(ylist namespaces "$d")
   # shellcheck disable=SC2086
   [ -z "$ns" ] || kx delete namespace $ns --ignore-not-found --wait=false >/dev/null 2>&1
@@ -156,7 +206,6 @@ scenario_cleanup() {
     for n in $nodes; do n=$(node_name "$n"); reset_node_files "$n" </dev/null; start_kubelets "$n"; done
   fi
   [ "$level" = gw ] && reset_gw </dev/null
-  [ "$(yget gitops "$d")" = true ] && reset_gitops_baseline
   return 0
 }
 
@@ -198,14 +247,15 @@ cmd_start() {
   rel "$d" > "$STATE_DIR/current"
   mkdir -p "$WS/$id"
   [ -d "$d/manifests" ] && cp -a "$d/manifests/." "$WS/$id/"
-  git -C "$WS/$id" init -q 2>/dev/null; git -C "$WS/$id" add -A
-  git -C "$WS/$id" -c user.name=lab -c user.email=lab@k8s.lab commit -qm "as found" --allow-empty
   [ "$(yget gitops "$d")" = true ] && gitops_clone >/dev/null
   : > "$SETUP_LOG"
   export LAB_ID=$id
   if [ -f "$d/.lab/setup.sh" ]; then
     run_lab_script "$d/.lab/setup.sh" "$WS/$id" >> "$SETUP_LOG" 2>&1 || { tail -15 "$SETUP_LOG" >&2; die "setup failed (log: .state/setup.log)"; }
   fi
+  # "as found" = what the student gets, including files setup wrote (./lab diff shows only their changes)
+  git -C "$WS/$id" init -q 2>/dev/null; git -C "$WS/$id" add -A
+  git -C "$WS/$id" -c user.name=lab -c user.email=lab@k8s.lab commit -qm "as found" --allow-empty
   remember started "$(date +%s)"
   show_ticket "$d"
 }

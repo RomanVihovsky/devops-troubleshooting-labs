@@ -32,6 +32,7 @@ ${C_BOLD}Labs${C_0}
   ./lab reset | stop | status start the lab again / clean up / what's running
   ./lab selftest <id..|pilots|waveN|learn|all>   start -> verify FAIL -> solve -> verify PASS
   eval "\$(./lab env)"         kubectl, helm, argocd, kubeseal, bao, sops for the lab cluster in this shell
+  ./lab ui                    Argo CD, Gitea, OpenBao, ingress, registry: URLs and credentials
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
 
 ${C_BOLD}Cluster${C_0}
@@ -102,7 +103,8 @@ case "${1:-help}" in
     esac ;;
   images)
     case ${2:-} in build) images_build ;; *) die "usage: ./lab images build" ;; esac ;;
-  env) gitops_tools; cluster_env ;;
+  env) gitops_tools; cluster_env; gitops_env ;;
+  ui) lab_ui ;;
   node)
     [ $# -ge 2 ] || die "usage: ./lab node <node> [cmd...]"
     n=$2; shift 2; ip=$(node_ip "$n"); [ -n "$ip" ] || die "unknown node: $n"

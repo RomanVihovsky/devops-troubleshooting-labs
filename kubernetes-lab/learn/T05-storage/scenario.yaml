@@ -1,0 +1,9 @@
+id: T05
+title: Storage - local-path vs NFS RWX, snapshots, reclaim policy
+kind: learn
+level: 2
+domain: storage
+est: 40m
+reset: ns
+namespaces: [t05]
+gitops: false

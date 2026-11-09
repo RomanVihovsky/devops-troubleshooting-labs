@@ -1,0 +1,9 @@
+id: T01
+title: Lab tour - the kit, ./lab, the nodes, the UIs and the reset ladder
+kind: learn
+level: 1
+domain: tour
+est: 20m
+reset: ns
+namespaces: [t01]
+gitops: false

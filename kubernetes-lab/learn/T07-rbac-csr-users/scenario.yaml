@@ -1,0 +1,9 @@
+id: T07
+title: RBAC + CSR users - a user certificate, a group binding, a ServiceAccount token
+kind: learn
+level: 2
+domain: security
+est: 40m
+reset: ns
+namespaces: [t07]
+gitops: false

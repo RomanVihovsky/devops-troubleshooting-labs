@@ -276,3 +276,30 @@ gitops_checks() {
   check_eventually 60 "demo.lab: 401 without token, 200 with the sealed one" demo_auth_ok
   check "Argo CD UI http://$ARGOCD_LB_IP" curl -fs --max-time 5 "http://$ARGOCD_LB_IP/healthz"
 }
+
+# ------------------------------------------------------------- ./lab ui/env ----
+# gitops_env: the extra exports of ./lab env (bao, sops, argocd CLIs against the lab)
+gitops_env() {
+  echo "export BAO_ADDR=$BAO_URL BAO_CACERT=$CA_DIR/ca.crt"
+  [ -s "$BAO_DIR/root-token" ] && echo "export BAO_TOKEN=$(cat "$BAO_DIR/root-token")"
+  echo "export SOPS_AGE_KEY_FILE=$STATE_DIR/age.key"
+  echo "export ARGOCD_SERVER=$ARGOCD_LB_IP ARGOCD_OPTS=--plaintext"
+}
+# lab_ui: every endpoint of the lab and where its credentials are (all of them live in .state/)
+lab_ui() {
+  local n
+  cat <<EOF
+${C_BOLD}Web UIs and endpoints${C_0} (credentials are lab-only, kept in $(rel "$STATE_DIR")/)
+  Argo CD   http://$ARGOCD_LB_IP                user admin / $(cat "$ARGO_DIR/admin-password" 2>/dev/null || echo '?')
+            CLI: argocd login $ARGOCD_LB_IP --plaintext --username admin --password \$(cat $(rel "$ARGO_DIR")/admin-password)
+  Gitea     $GITEA_URL          user lab / $(cat "$GITEA_DIR/password" 2>/dev/null || echo '?')   repo lab/gitops (your clone: workspace/gitops)
+  OpenBao   $BAO_URL/ui    token $(rel "$BAO_DIR")/root-token, CA $(rel "$CA_DIR")/ca.crt (bao CLI: eval "\$(./lab env)")
+  API       https://192.168.56.20:6443           haproxy on k8s-gw -> k8s-cp1:6443 (KUBECONFIG $(rel "$KUBECONFIG"))
+  Ingress   http://192.168.56.200                 Traefik (MetalLB): curl -H 'Host: demo.lab' / 'Host: shop.lab'
+            demo needs "Authorization: Bearer \$(cat $(rel "$STATE_DIR")/demo-token)"
+  Registry  http://192.168.56.20:5000/v2/_catalog   (registry.lab:5000 inside the cluster)
+  Files     $GW_FILES/                 pinned binaries, charts and the apt repo
+${C_BOLD}Nodes${C_0} (./lab node <name>)
+EOF
+  for n in $(node_rows | awk '$7 != "spare" { print $1 "=" $4 "(" $7 ")" }'); do echo "  $n"; done
+}

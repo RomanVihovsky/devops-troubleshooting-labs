@@ -17,6 +17,8 @@ scenarios/<ID>-kebab/            (learn/T..-kebab/ for the learn track: same fil
   .lab/verify.sh  check ... ; verdict              (bash -u, NO pipefail: `kubectl | grep -q` races)
   .lab/solve.sh   the reference fix                (bash -euo pipefail)
   .lab/solution.md  root cause, diagnosis commands, fix, interview notes
+  .lab/cleanup.sh   optional: leftovers the reset level doesn't cover (cluster-scoped CSRs, Retain PVs)
+  .lab/facts.sh     optional: the live truth an answers.yaml is checked against (sourced by verify + solve)
 ```
 
 The scripts run on the desktop VM, from `workspace/<ID>/`, with `lib/{common,vm,cluster,gitops,golden,scenario}.sh`
@@ -50,6 +52,9 @@ escalates to a full `cluster reset` by itself.
 | `wait_rollout ns kind/name [s]` | rollout status with a timeout |
 | `http_code ns url [header]` / `http_ok ...` | HTTP status seen **from inside** the cluster (throwaway busybox pod) |
 | `http_out url [Host]` | HTTP status **from the desktop** (MetalLB 192.168.56.200, NodePorts) |
+| `tcp_ok_as ns labels\|- host:port` / `check_reach <<'EOF'` | TCP connect from a throwaway agnhost pod that carries `labels` (the NetworkPolicy view); `check_reach` = one check per row `ns labels host:port open\|blocked`, probes in parallel. Don't give a probe labels that a ReplicaSet selects - it would adopt it |
+| `answer key` / `answered key truth [alt..]` | exploration labs: the student's `workspace/<ID>/answers.yaml` vs. the live value (trimmed, case-insensitive) |
+| `cluster_bare_build <version>` | a bare cluster (control plane + workers + Calico) at an older version, cp1's PKI kept (the desktop kubeconfig stays valid) - for upgrade labs; needs `reset: cluster` |
 | `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready and no restarts for s seconds" |
 | `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view |
 | `fault_partition node` / `fault_clear node` | cut a node off the cluster network (nft table `lab_fault`), keep the desktop's SSH |
@@ -84,6 +89,13 @@ Gotchas:
    the "don't cheat" guards, e.g. "pod labels unchanged" or "the freeze is still in Git".
 4. `./lab selftest <ID>` must show `broken:ok fixed:ok`. Run it twice, then once after a different
    scenario.
+
+## Learn labs (`learn/Tnn-*`, `kind: learn`)
+
+Same files and the same selftest (before the student's work verify must FAIL). Guided steps in the ticket,
+hints that give the commands, a solution with takeaways. Exploration labs keep the facts in a template
+`manifests/answers.yaml` and compute the truth live in `.lab/facts.sh`, so a pod that moved or a
+re-built CA never makes a stale answer "right".
 
 ## What the lab deliberately does NOT do
 

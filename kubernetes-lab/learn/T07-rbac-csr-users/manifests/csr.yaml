@@ -1,0 +1,9 @@
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: t07-jane
+spec:
+  request: TODO                 # base64 -w0 jane.csr
+  signerName: TODO
+  usages: [TODO]
+  expirationSeconds: 86400

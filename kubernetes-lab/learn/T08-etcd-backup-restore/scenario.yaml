@@ -1,0 +1,9 @@
+id: T08
+title: etcd backup and restore - snapshot, accident, restore
+kind: learn
+level: 2
+domain: control-plane
+est: 40m
+reset: cluster
+namespaces: []
+gitops: false
