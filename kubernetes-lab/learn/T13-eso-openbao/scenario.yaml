@@ -1,0 +1,9 @@
+id: T13
+title: ESO + OpenBao - kv-v2, a least-privilege policy and role, SecretStore with caProvider, rotation
+kind: learn
+level: 3
+domain: secrets
+est: 45m
+reset: gw
+namespaces: [t13]
+gitops: false

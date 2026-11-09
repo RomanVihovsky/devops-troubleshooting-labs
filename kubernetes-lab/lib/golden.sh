@@ -132,14 +132,16 @@ reset_gitops_baseline() {
 start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl enable --now containerd kubelet 2>/dev/null' </dev/null; done; }
 
 # cluster_bare_build <version>: a bare cluster (control plane + workers + Calico, no other addons) at an older
-# version - the starting point of the upgrade labs (T09, K13). kubeadm reset everywhere, but cp1 keeps its PKI and
-# kubeconfigs: kubeadm init reuses an existing CA and valid kubeconfigs, so the desktop kubeconfig, OpenBao's
-# kubernetes auth and the golden stay valid. The next "cluster" reset brings back the golden (packages included).
+# version - the starting point of the upgrade labs (T09, K13). kubeadm reset everywhere, but cp1 keeps its PKI:
+# kubeadm init reuses an existing CA and SA key, so the desktop kubeconfig (a client cert of that CA, group
+# kubeadm:cluster-admins), OpenBao's kubernetes auth and the golden stay valid. Not the kubeconfigs: with an
+# existing admin.conf, init tries to create its ClusterRoleBinding before the API is up, and fails.
+# The next "cluster" reset brings back the golden (packages included).
 cluster_bare_build() {
   local v=${1:-$K8S_BUILD_VERSION} n pids=()
   ensure_tools
   info "bare cluster at v$v: kubeadm reset on every node ($CP keeps its PKI)"
-  nx "$CP" 'rm -rf /var/tmp/k8slab-pki && mkdir -p /var/tmp/k8slab-pki && cp -a /etc/kubernetes/pki /etc/kubernetes/*.conf /var/tmp/k8slab-pki/' </dev/null \
+  nx "$CP" 'rm -rf /var/tmp/k8slab-pki && mkdir -p /var/tmp/k8slab-pki && cp -a /etc/kubernetes/pki /var/tmp/k8slab-pki/' </dev/null \
     || die "could not save the PKI on $CP"
   for n in $(cluster_nodes); do
     nxi "$n" > /dev/null 2>&1 <<'EOF2' & pids+=($!)
@@ -156,7 +158,7 @@ EOF2
   pids=()
   for n in $(cluster_nodes); do pkg_install "$n" "$v" kubeadm kubelet kubectl </dev/null & pids+=($!); done
   for n in "${pids[@]}"; do wait "$n" || die "package downgrade to $v failed"; done
-  nx "$CP" 'mkdir -p /etc/kubernetes && cp -a /var/tmp/k8slab-pki/pki /var/tmp/k8slab-pki/*.conf /etc/kubernetes/ && rm -rf /var/tmp/k8slab-pki' </dev/null
+  nx "$CP" 'mkdir -p /etc/kubernetes && cp -a /var/tmp/k8slab-pki/pki /etc/kubernetes/ && rm -rf /var/tmp/k8slab-pki' </dev/null
   info "kubeadm init on $CP (v$v, existing CA)"
   render "$LAB_DIR/infra/node/kubeadm-init.yaml.tpl" CP="$CP" CP_IP="$(node_ip "$CP")" VERSION="$v" \
     API_ENDPOINT="$API_ENDPOINT" POD_CIDR="$POD_CIDR" SERVICE_CIDR="$SERVICE_CIDR" \

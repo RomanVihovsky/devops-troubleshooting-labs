@@ -1,0 +1,9 @@
+id: T11
+title: Argo CD - app-of-apps, AppProject, manual vs automated sync, self-heal
+kind: learn
+level: 2
+domain: delivery
+est: 40m
+reset: ns
+namespaces: [t11]
+gitops: true

@@ -1,0 +1,9 @@
+id: T10
+title: Helm - chart anatomy, values precedence, upgrade, failed release, rollback
+kind: learn
+level: 2
+domain: delivery
+est: 40m
+reset: ns
+namespaces: [t10]
+gitops: false

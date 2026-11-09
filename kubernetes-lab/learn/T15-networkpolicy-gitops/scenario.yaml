@@ -1,0 +1,9 @@
+id: T15
+title: NetworkPolicy for a GitOps stack - default deny, DNS, app flows, ESO and Argo CD egress
+kind: learn
+level: 3
+domain: networkpolicy
+est: 60m
+reset: cluster
+namespaces: []
+gitops: false

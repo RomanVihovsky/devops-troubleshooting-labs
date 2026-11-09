@@ -1,0 +1,20 @@
+# starter for apps/t11.yaml in workspace/gitops - complete the TODOs
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: t11
+  namespace: argocd
+spec:
+  project: TODO
+  source:
+    repoURL: http://git.lab:3000/lab/gitops.git
+    targetRevision: main
+    path: TODO                        # the labapp chart in this repo
+    helm:
+      releaseName: t11
+      valuesObject: {fullnameOverride: t11}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: TODO
+  syncPolicy:
+    syncOptions: [CreateNamespace=true]

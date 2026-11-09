@@ -1,0 +1,9 @@
+id: T16
+title: Hardening - encryption at rest, an audit policy, Pod Security Admission
+kind: learn
+level: 3
+domain: security
+est: 60m
+reset: cluster
+namespaces: [t16]
+gitops: false
