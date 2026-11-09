@@ -232,6 +232,7 @@ cluster_doctor() {
   check_eventually 120 "kubectl top nodes (metrics-server, verified kubelet certs)" kx top nodes
   check "node clocks within 1 s (chrony from k8s-gw)" clocks_ok
   check "API server cert valid > 300 days ($(cert_days) left)" test "$(cert_days)" -gt 300
+  gitops_checks
   doctor_cleanup || warn "namespace lab-doctor still terminating"
   verdict
 }

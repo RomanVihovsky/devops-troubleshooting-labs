@@ -1,0 +1,17 @@
+# demo: one labapp behind demo.lab; every non-ops request needs "Authorization: Bearer <token>".
+# The token comes from a SealedSecret - sealed (strict scope) for namespace demo, Secret name demo-auth.
+fullnameOverride: demo
+ingress:
+  enabled: true
+  hosts:
+    - host: demo.lab
+      paths: [{path: /, pathType: Prefix}]
+secrets:
+  source: sealedSecret
+  name: demo-auth
+  env:
+    AUTH_TOKEN: auth-token
+  sealedSecret:
+    scope: strict
+    encryptedData:
+      auth-token: @DEMO_AUTH_TOKEN_SEALED@

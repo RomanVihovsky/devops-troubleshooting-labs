@@ -9,10 +9,21 @@ source "$LAB_DIR/versions.env"
 OUT="$LAB_DIR/infra/artifacts.txt"
 GH=https://github.com
 RAW=https://raw.githubusercontent.com
-tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-
-get()  { curl -fsSL --retry 3 --max-time 120 "$@"; }
-hash_url() { get -o "$tmp/f" "$1"; sha256sum "$tmp/f" | cut -d' ' -f1; }
+# Every download is cached in cache/pin (by URL), so a rerun only goes online for URLs it hasn't seen -
+# one flaky host doesn't break a re-pin. --refresh empties the cache first.
+PIN_CACHE="$LAB_DIR/cache/pin"
+[ "${1:-}" = --refresh ] && rm -rf "$PIN_CACHE"
+mkdir -p "$PIN_CACHE"
+cached() {   # url -> path of the cached copy (downloaded on first use)
+  local f; f="$PIN_CACHE/$(printf '%s' "$1" | sha256sum | cut -c1-40)"
+  if [ ! -s "$f" ]; then
+    curl -fsSL --retry 4 --retry-connrefused --retry-delay 5 --max-time 180 -o "$f.part" "$1" >&2 || { rm -f "$f.part"; return 1; }
+    mv "$f.part" "$f"
+  fi
+  echo "$f"
+}
+get()  { local f; f=$(cached "$1") && cat "$f"; }
+hash_url() { local f; f=$(cached "$1") && sha256sum "$f" | cut -d' ' -f1; }
 # sum_from <checksum-file-url> <file name in it>
 sum_from() { get "$1" | awk -v f="$2" '{ n = $2; sub(/^\*/, "", n); sub(/^.*\//, "", n) } !found && n == f { print $1; found = 1 }'; }
 # chart_url <repo index url> <chart> <version>
@@ -68,6 +79,26 @@ line() { [ -n "$3" ] || { echo "no checksum for $1" >&2; exit 1; }; printf '%s %
   line "metrics-server-$METRICS_SERVER_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
   u=$(chart_url $RAW/kubernetes-csi/csi-driver-nfs/master/charts/index.yaml csi-driver-nfs "$CSI_NFS_CHART_VERSION")
   line "csi-driver-nfs-$CSI_NFS_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
+
+  # ---- Phase 2: GitOps + secrets
+  u=$GH/argoproj/argo-cd/releases/download/v$ARGOCD_VERSION/argocd-linux-amd64
+  line "argocd-$ARGOCD_VERSION-linux-amd64" "$u" "$(sum_from "${u%/*}/cli_checksums.txt" argocd-linux-amd64)"
+  u=$GH/bitnami/sealed-secrets/releases/download/v$SEALED_SECRETS_VERSION/kubeseal-$SEALED_SECRETS_VERSION-linux-amd64.tar.gz
+  line "${u##*/}" "$u" "$(sum_from "${u%/*}/sealed-secrets_${SEALED_SECRETS_VERSION}_checksums.txt" "${u##*/}")"
+  u=$GH/openbao/openbao/releases/download/v$OPENBAO_VERSION/openbao_${OPENBAO_VERSION}_linux_amd64.deb
+  line "${u##*/}" "$u" "$(sum_from "${u%/*}/checksums.txt" "${u##*/}")"
+  u=$GH/go-gitea/gitea/releases/download/v$GITEA_VERSION/gitea-$GITEA_VERSION-linux-amd64
+  line "${u##*/}" "$u" "$(get "$u.sha256" | awk 'NR == 1 { print $1 }')"
+  u=$GH/getsops/sops/releases/download/v$SOPS_VERSION/sops-v$SOPS_VERSION.linux.amd64
+  line "${u##*/}" "$u" "$(sum_from "${u%/*}/sops-v$SOPS_VERSION.checksums.txt" "${u##*/}")"
+  u=$GH/FiloSottile/age/releases/download/v$AGE_VERSION/age-v$AGE_VERSION-linux-amd64.tar.gz
+  line "${u##*/}" "$u" "$(hash_url "$u")"
+  u=$(chart_url https://argoproj.github.io/argo-helm/index.yaml argo-cd "$ARGOCD_CHART_VERSION")
+  line "argo-cd-$ARGOCD_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
+  u=$(chart_url https://bitnami.github.io/sealed-secrets/index.yaml sealed-secrets "$SEALED_SECRETS_CHART_VERSION")
+  line "sealed-secrets-$SEALED_SECRETS_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
+  u=$(chart_url https://charts.external-secrets.io/index.yaml external-secrets "$ESO_CHART_VERSION")
+  line "external-secrets-$ESO_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
 } > "$OUT.new"
 mv "$OUT.new" "$OUT"
 echo "wrote ${OUT#"$LAB_DIR"/}: $(grep -vc '^#' "$OUT") artifacts"

@@ -18,3 +18,12 @@ metallb-0.16.1.tgz https://github.com/metallb/metallb/releases/download/metallb-
 traefik-42.1.3.tgz https://traefik.github.io/charts/traefik/traefik-42.1.3.tgz 10ec2b032fd7ec9fa04a8816872e20ba0fafc47231f6394b5cb5d522f3b0ef50
 metrics-server-3.14.0.tgz https://github.com/kubernetes-sigs/metrics-server/releases/download/metrics-server-helm-chart-3.14.0/metrics-server-3.14.0.tgz c2ca1185c01e6e7f53dd1b7d131f0c9b3fa50e003ed068b784563a1b5a3422a1
 csi-driver-nfs-4.13.6.tgz https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts/v4.13.6/csi-driver-nfs-4.13.6.tgz 4b471fb134bfea4fcaa3dc3342a67acd646431b746c673c978327353db5d22da
+argocd-3.5.6-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/v3.5.6/argocd-linux-amd64 db9d17b70593d3f86a4dcf08d9ebbb85a42e995426ac5f928b737260656102d3
+kubeseal-0.41.2-linux-amd64.tar.gz https://github.com/bitnami/sealed-secrets/releases/download/v0.41.2/kubeseal-0.41.2-linux-amd64.tar.gz 666b5db6788ad1dedb56e2d97064e1cc3779aa77bbd6f4b56b62beeb1941ed79
+openbao_2.7.2_linux_amd64.deb https://github.com/openbao/openbao/releases/download/v2.7.2/openbao_2.7.2_linux_amd64.deb 42bd0890a8e2060e5f29410ea828ee047aa2de21028045731a0516d5a532928c
+gitea-28.2.0-linux-amd64 https://github.com/go-gitea/gitea/releases/download/v28.2.0/gitea-28.2.0-linux-amd64 15681fc615d56611c274f52803fef4d6d5316b620f93b677dd4b831a74e50b9f
+sops-v3.13.3.linux.amd64 https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+age-v1.3.2-linux-amd64.tar.gz https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+argo-cd-10.11.6.tgz https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.11.6/argo-cd-10.11.6.tgz d8f096d87513b41ff754053a7f9604c943bf29c15436a79226fd51595ea67d05
+sealed-secrets-2.22.0.tgz https://github.com/bitnami/sealed-secrets/releases/download/helm-v2.22.0/sealed-secrets-2.22.0.tgz 1ed23bb224652aa6c8477979d4bddccd207205b27b12b120f62f360890c80606
+external-secrets-2.14.0.tgz https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.14.0/external-secrets-2.14.0.tgz 0a6d9e91b1ff50adfdbf24b50b582babfa7c5b7df42b21974ca4b3fb88ee5e34

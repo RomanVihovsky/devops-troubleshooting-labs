@@ -1,0 +1,15 @@
+# AppProject "lab": the apps may only come from this repo and land in their own namespaces
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: lab
+  namespace: argocd
+spec:
+  description: kubernetes-lab applications
+  sourceRepos:
+    - http://git.lab:3000/lab/gitops.git
+  destinations:
+    - {server: https://kubernetes.default.svc, namespace: demo}
+    - {server: https://kubernetes.default.svc, namespace: shop}
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}

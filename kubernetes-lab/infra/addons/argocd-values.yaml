@@ -1,0 +1,19 @@
+# Argo CD for the lab: UI/API on the LoadBalancer IP 192.168.56.201 (plain HTTP, TLS off on purpose),
+# no Dex/notifications, Redis from Docker Hub (the chart's default ecr-public.aws.com is not mirrored).
+dex:
+  enabled: false
+notifications:
+  enabled: false
+redis:
+  image:
+    repository: docker.io/library/redis
+configs:
+  params:
+    server.insecure: true
+  cm:
+    timeout.reconciliation: 60s      # lab pace: notice Git changes within a minute
+server:
+  service:
+    type: LoadBalancer
+    annotations:
+      metallb.io/loadBalancerIPs: 192.168.56.201

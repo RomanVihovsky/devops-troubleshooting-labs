@@ -13,6 +13,8 @@ source "$LAB_DIR/lib/cluster.sh"
 source "$LAB_DIR/lib/upgrade.sh"
 # shellcheck source=lib/golden.sh
 source "$LAB_DIR/lib/golden.sh"
+# shellcheck source=lib/gitops.sh
+source "$LAB_DIR/lib/gitops.sh"
 
 usage() {
   cat <<EOF
@@ -33,6 +35,12 @@ ${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0:
   ./lab cluster golden        save the reset baseline (node files, etcd snapshot, gw configs) on this desktop
   ./lab cluster reset [cluster | node <node..>]   back to the golden, in-guest (2-3 min for cluster)
   ./lab cluster rebuild       last resort: kubeadm reset everywhere, build, upgrade, new golden (~15 min)
+
+  ./lab gitops gw             lab CA, OpenBao (TLS, auto-unseal, kv) and Gitea (repo lab/gitops) on k8s-gw
+  ./lab gitops stack          Sealed Secrets, External Secrets (+ store "openbao"), Argo CD (http://$ARGOCD_LB_IP)
+  ./lab gitops seed           push the baseline repo (charts, apps, envs) to Gitea, apply the root app
+  ./lab gitops clone          workspace/gitops - your clone of lab/gitops
+  ./lab images build          labapp image tags -> registry.lab:5000/lab/labapp
   eval "\$(./lab env)"         kubectl / helm for the lab cluster in this shell
   ./lab vm soak [minutes]     load every node (default 30 min) and check none stops answering
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
@@ -68,7 +76,18 @@ case "${1:-help}" in
       rebuild) cluster_rebuild ;;
       *) die "usage: ./lab cluster build|upgrade|doctor|golden|reset|rebuild" ;;
     esac ;;
-  env) ensure_tools; cluster_env ;;
+  gitops)
+    sub=${2:-}; shift 2 || shift $#
+    case $sub in
+      gw) gitops_gw "$@" ;;
+      stack) gitops_stack ;;
+      seed) gitops_seed ;;
+      clone) gitops_clone ;;
+      *) die "usage: ./lab gitops gw|stack|seed|clone" ;;
+    esac ;;
+  images)
+    case ${2:-} in build) images_build ;; *) die "usage: ./lab images build" ;; esac ;;
+  env) gitops_tools; cluster_env ;;
   node)
     [ $# -ge 2 ] || die "usage: ./lab node <node> [cmd...]"
     n=$2; shift 2; ip=$(node_ip "$n"); [ -n "$ip" ] || die "unknown node: $n"

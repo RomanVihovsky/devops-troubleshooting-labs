@@ -1,0 +1,2 @@
+# External Secrets Operator: chart defaults (CRDs included). The ClusterSecretStore "openbao": eso-store.yaml.tpl
+{}

@@ -9,7 +9,9 @@ NODE_PATHS="/etc/kubernetes /var/lib/kubelet/config.yaml /var/lib/kubelet/kubead
 /etc/containerd /etc/cni/net.d /usr/lib/systemd/system/kubelet.service.d /etc/systemd/system/kubelet.service.d
 /etc/default/kubelet /etc/sysctl.d /etc/modules-load.d /etc/fstab /etc/hosts /etc/chrony /etc/crictl.yaml
 /etc/apt/sources.list.d/k8slab.list"
-GW_PATHS="/etc/haproxy /etc/chrony /etc/exports.d /etc/nginx/sites-available/k8slab /etc/k8slab /etc/hosts"
+GW_PATHS="/etc/haproxy /etc/chrony /etc/exports.d /etc/nginx/sites-available/k8slab /etc/k8slab /etc/hosts
+/etc/openbao /var/lib/openbao /etc/gitea /var/lib/gitea"
+GW_STATEFUL="openbao k8slab-gitea"   # stopped while their data is copied / restored
 ETCD_FLAGS="--endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key"
 
 # ---------------------------------------------------------------- golden ----
@@ -23,7 +25,8 @@ cluster_golden() {
     nx "$n" "tar -czf - --ignore-failed-read $(echo "$NODE_PATHS" | tr '\n' ' ') 2>/dev/null" </dev/null > "$new/$n.tgz"
     nx "$n" "dpkg-query -W -f '\${Package}=\${Version}\n' kubeadm kubelet kubectl cri-tools kubernetes-cni" </dev/null > "$new/$n.packages"
   done
-  nx k8s-gw "tar -czf - --ignore-failed-read $GW_PATHS 2>/dev/null" </dev/null > "$new/k8s-gw.tgz"
+  nx k8s-gw "systemctl stop $GW_STATEFUL 2>/dev/null; tar -czf - --ignore-failed-read $(echo "$GW_PATHS" | tr '\n' ' ') 2>/dev/null; rc=\$?
+    systemctl start $GW_STATEFUL 2>/dev/null; exit \$rc" </dev/null > "$new/k8s-gw.tgz"
   nx "$CP" "etcdctl $ETCD_FLAGS snapshot save /var/tmp/golden-etcd.db >/dev/null && etcdutl snapshot status /var/tmp/golden-etcd.db -w table >&2 && cat /var/tmp/golden-etcd.db && rm -f /var/tmp/golden-etcd.db" \
     </dev/null > "$new/etcd.db" 2> "$new/etcd.status"
   [ -s "$new/etcd.db" ] || die "etcd snapshot failed: $(cat "$new/etcd.status")"
@@ -97,8 +100,10 @@ EOF
 
 reset_gw() {
   push_file k8s-gw /var/tmp/k8slab-golden.tgz < "$GOLDEN_DIR/k8s-gw.tgz"
-  nx k8s-gw 'tar -xzf /var/tmp/k8slab-golden.tgz -C / && rm -f /var/tmp/k8slab-golden.tgz
-    exportfs -ra; systemctl restart haproxy chrony nginx k8slab-registry nfs-server' </dev/null
+  nx k8s-gw "systemctl stop $GW_STATEFUL 2>/dev/null; rm -rf /var/lib/openbao/data /var/lib/gitea/data
+    tar -xzf /var/tmp/k8slab-golden.tgz -C / && rm -f /var/tmp/k8slab-golden.tgz
+    exportfs -ra; systemctl restart haproxy chrony nginx k8slab-registry nfs-server
+    systemctl start $GW_STATEFUL 2>/dev/null; true" </dev/null
 }
 
 # enable too: a scenario may have disabled kubelet, which would bite at the next reboot
@@ -148,5 +153,6 @@ cluster_rebuild() {
   rm -f "$KUBECONFIG"
   cluster_build "$K8S_BUILD_VERSION"
   cluster_upgrade "$(minor_of "$K8S_VERSION")"
+  if [ -s "$BAO_DIR/root-token" ]; then gitops_stack; gitops_seed; fi   # Phase 2 stack (sealing key restored from .state)
   cluster_golden
 }

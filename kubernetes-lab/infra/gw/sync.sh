@@ -99,7 +99,13 @@ gen_images() {
     chart_images "$FILES/traefik-$TRAEFIK_CHART_VERSION.tgz" "$SRC/infra/addons/traefik-values.yaml" | sed 's|^|traefik |'
     chart_images "$FILES/metrics-server-$METRICS_SERVER_CHART_VERSION.tgz" "$SRC/infra/addons/metrics-server-values.yaml" | sed 's|^|metrics |'
     chart_images "$FILES/csi-driver-nfs-$CSI_NFS_CHART_VERSION.tgz" "$SRC/infra/addons/nfs-values.yaml" | sed 's|^|storage |'
+    chart_images "$FILES/argo-cd-$ARGOCD_CHART_VERSION.tgz" "$SRC/infra/addons/argocd-values.yaml" | sed 's|^|gitops |'
+    chart_images "$FILES/sealed-secrets-$SEALED_SECRETS_CHART_VERSION.tgz" "$SRC/infra/addons/sealed-secrets-values.yaml" | sed 's|^|gitops |'
+    chart_images "$FILES/external-secrets-$ESO_CHART_VERSION.tgz" "$SRC/infra/addons/eso-values.yaml" | sed 's|^|gitops |'
     printf 'lab %s\n' "$AGNHOST_IMAGE" "$BUSYBOX_IMAGE"
+    # lab-owned images (registry.lab:5000/lab/...): copied from LAB_IMAGES below, labapp built by ./lab images build
+    for m in $LAB_IMAGES; do echo "lab-own $REG/${m%%=*}"; done
+    for t in $LABAPP_TAGS; do echo "lab-own $REG/lab/labapp:$t"; done
   } | while read -r g img; do
     case $g in \#*) echo "$g $img"; continue ;; esac
     img=$(qualify "$img")
@@ -116,8 +122,13 @@ crane_copy() {   # src dst [flags]: quiet unless it fails (crane logs every blob
 sync_images() {
   local g img dst n=0 c=0
   gen_images
+  for m in $LAB_IMAGES; do   # lab-owned copies: registry.lab:5000/<lab path> <- pinned upstream ref
+    dst="$REG/${m%%=*}"
+    crane digest --insecure "$dst" >/dev/null 2>&1 && continue
+    say "image ${m#*=} -> $dst"; crane_copy "${m#*=}" "$dst" --platform linux/amd64
+  done
   while read -r g img; do
-    case $g in ''|\#*) continue ;; esac
+    case $g in ''|\#*|lab-own) continue ;; esac
     n=$((n + 1)); dst="$REG/${img%@sha256:*}"
     if [[ $img == *@sha256:* ]]; then
       # pinned by digest: copy the whole index so the digest stays valid
