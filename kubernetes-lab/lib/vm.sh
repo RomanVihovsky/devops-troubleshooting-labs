@@ -193,6 +193,65 @@ vm_seedtest() {
   verdict
 }
 
+# ---------------------------------------------------------------- vm soak ----
+# vm_soak [minutes]: capped load on every node (CPU at half its vCPUs, 1/4 of RAM held, 256 MB disk writes
+# every 30 s) while the desktop probes each node every 30 s. Gate for "VirtualBox stays up under load".
+SOAK_LOG="$STATE_DIR/soak.log"
+soak_start_node() {   # node seconds
+  nxi "$1" <<EOF
+systemctl stop k8slab-soak 2>/dev/null; systemctl reset-failed k8slab-soak 2>/dev/null
+cat > /run/k8slab-soak.sh <<'S'
+#!/bin/bash
+# load for ./lab vm soak: CPU workers (capped by the unit's CPUQuota), memory held, periodic direct disk writes
+for i in \$(seq "\$(nproc)"); do ( while :; do :; done ) & done
+python3 -c "import time; b=bytearray(\$1*1048576)
+for i in range(0, len(b), 4096): b[i] = 1
+time.sleep(10**6)" &
+while :; do dd if=/dev/zero of=/var/tmp/k8slab-soak.bin bs=1M count=256 oflag=direct status=none; rm -f /var/tmp/k8slab-soak.bin; sleep 30; done
+S
+mem=\$(( \$(awk '/MemTotal/{print int(\$2/1024)}' /proc/meminfo) / 4 ))
+systemd-run --quiet --unit=k8slab-soak --collect -p RuntimeMaxSec=$2 -p CPUQuota=\$(( \$(nproc) * 50 ))% -p Nice=10 \
+  /bin/bash /run/k8slab-soak.sh "\$mem"
+echo "\$(nproc) vCPU at \$(( \$(nproc) * 50 ))%, \${mem} MB held"
+EOF
+}
+vm_soak() {
+  local min=${1:-30} n line t0 end p f r ml mm a
+  local -a nodes
+  if ! [[ $min =~ ^[1-9][0-9]*$ ]]; then die "usage: ./lab vm soak [minutes]"; fi
+  mapfile -t nodes < <(active_nodes)
+  : > "$SOAK_LOG"
+  health_start
+  info "soak: $min min on ${nodes[*]} - log $(rel "$SOAK_LOG"), desktop health $(rel "$STATE_DIR/health.log")"
+  for n in "${nodes[@]}"; do
+    printf '  %-8s %s\n' "$n" "$(soak_start_node "$n" $((min * 60 + 60)) </dev/null 2>&1 | tail -1)"
+  done
+  t0=$(date +%s); end=$((SECONDS + min * 60))
+  while [ $SECONDS -lt $end ]; do
+    for n in "${nodes[@]}"; do
+      line=$(nssh "$n" 'echo "$(cut -d" " -f1 /proc/loadavg) $(awk "/MemAvailable/{print int(\$2/1024)}" /proc/meminfo) $(cut -d. -f1 /proc/uptime) $(systemctl is-active k8slab-soak)"' </dev/null 2>/dev/null) \
+        || line="NO-ANSWER"
+      echo "$(date +%T) $n $line" >> "$SOAK_LOG"
+    done
+    sleep 30
+  done
+  for n in "${nodes[@]}"; do nx "$n" 'systemctl stop k8slab-soak 2>/dev/null; rm -f /var/tmp/k8slab-soak.bin' </dev/null || true; done
+  health_stop
+  echo "$(( ($(date +%s) - t0) / 60 )) min. Per node: probes, no-answer, reboots, max load, min MB available, load running:"
+  CHECKS_FAILED=0
+  for n in "${nodes[@]}"; do
+    line=$(awk -v n="$n" '$2 == n { p++; if ($3 == "NO-ANSWER") { f++; next }
+            if (up != "" && $5 + 0 < up + 0) r++; up = $5
+            if ($3 + 0 > ml) ml = $3 + 0; if (mm == "" || $4 + 0 < mm) mm = $4 + 0; if ($6 == "active") a++ }
+          END { printf "%d %d %d %.2f %d %d", p, f, r, ml, mm, a }' "$SOAK_LOG")
+    read -r p f r ml mm a <<<"$line"
+    printf '  %-8s probes %-3s no-answer %-3s reboots %-2s max load %-5s min avail %5s MB  load active %s/%s\n' "$n" "$p" "$f" "$r" "$ml" "$mm" "$a" "$p"
+    check "$n answered every probe, never rebooted, load ran throughout" test "$f" = 0 -a "$r" = 0 -a "$a" = "$p" -a "$p" -gt 0
+  done
+  check "desktop journal kept writing (no FAIL in health log)" not grep -q 'journal=FAIL' "$STATE_DIR/health.log"
+  verdict
+}
+
 # ---------------------------------------------------------------- health ----
 # Desktop health log while the VMs work: load, memory, a journal write probe, gw ping.
 health_start() {

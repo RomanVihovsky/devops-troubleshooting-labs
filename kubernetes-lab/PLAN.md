@@ -156,7 +156,7 @@ interview, status.
 
 | Area | Commands / helpers |
 |---|---|
-| `./lab vm` (built) | `check`, `kit`, `seedtest`, `wait`, `status`; `./lab node <n>` |
+| `./lab vm` (built) | `check`, `kit`, `seedtest`, `wait`, `status`, `soak [min]`; `./lab node <n>` |
 | `./lab vm` (Phase 1) | `provision` |
 | `./lab cluster` (Phase 1) | `build`, `golden`, `reset`, `rebuild`, `doctor` |
 | Other commands | `./lab env` (PATH = `cache/bin`, KUBECONFIG), `./lab ui`, `./lab chaos`, `./lab exam` |
@@ -278,6 +278,10 @@ Settled on 2026-11-08 by the v2 decisions above.
     units, no `/dev/kvm`. NIC names are `enp0s3`/`enp0s8`; node-to-node RTT 0.5 ms.
   - `k8slab.bat check` gave no Windows-hypervisor warning, so VirtualBox isn't on NEM.
   - Fixed: `./lab vm status` stopped after the first node (ssh read the loop's stdin).
-- **Phase 0 gate, still open**:
-  1. `k8slab.bat snapshot spike` → change a file on a node → `k8slab.bat restore spike` → the change is gone.
-  2. A 30-min soak under load with no VirtualBox halt.
+- **Soak passed (2026-11-09, 10:21-10:51)**: `./lab vm soak 30` ran for 30 min, with load on all 5 VMs at once:
+  - CPU at half of every VM's vCPUs, a quarter of its RAM held, 256 MB direct disk writes every 30 s;
+  - 52 probes per node: 0 missed, 0 reboots, load active throughout (max load 1.2-2.6);
+  - desktop VM: max load 0.79, ≥16.9 GB available, journal never stopped, gw ping never down;
+  - no VirtualBox halt.
+- **Phase 0 gate, still open**: `k8slab.bat snapshot spike` → change a file on a node →
+  `k8slab.bat restore spike` → the change is gone.

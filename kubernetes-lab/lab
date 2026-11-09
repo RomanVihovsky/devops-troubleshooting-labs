@@ -18,6 +18,7 @@ ${C_BOLD}kubernetes-lab${C_0} - real kubeadm cluster in VirtualBox VMs (Phase 0:
   ./lab vm seedtest [node]    boot the seed under QEMU software emulation and check it (~5-10 min)
   ./lab vm wait [nodes]       wait until the VMs answer SSH with the right hostname and IP
   ./lab vm status             uptime, memory and disk of every node
+  ./lab vm soak [minutes]     load every node (default 30 min) and check none stops answering
   ./lab node <node> [cmd]     shell (or a command) on a node, e.g. ./lab node cp1
   ./lab health [start|stop|N] desktop health log while the VMs work
 
@@ -35,7 +36,8 @@ case "${1:-help}" in
       seedtest) vm_seedtest "$@" ;;
       wait) vm_wait "$@" ;;
       status) vm_status ;;
-      *) die "usage: ./lab vm check|kit|seedtest|wait|status" ;;
+      soak) vm_soak "$@" ;;
+      *) die "usage: ./lab vm check|kit|seedtest|wait|status|soak" ;;
     esac ;;
   node)
     [ $# -ge 2 ] || die "usage: ./lab node <node> [cmd...]"
