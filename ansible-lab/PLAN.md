@@ -385,8 +385,11 @@ X03 106 s (EE build). After `./lab stop`: no node containers (label `ansiblelab.
 Per-lab `./lab selftest` (offline network, ctl:2): L15 94 s, L16 80 s, D01 104 s, D02 125 s, I08 108 s, E08 142 s,
 E09 260 s - all `broken:ok fixed:ok`; E07 and I07 also passed (their timings were lost when the host rebooted and
 cleared `/tmp`). X05: `broken:ok`; its first fixed run exposed a bug in the lab's own `ci/smoke.sh` (below); after the
-fix, solve + verify PASS. E08's lock change and X05's fix are re-checked by the offline `selftest all` on ctl:2 that
-was running at commit time (36/63 passed, no failure by then).
+fix, solve + verify PASS. E08's lock change and X05's fix were re-checked by the full run below.
+
+Full selftest on ctl:2 (2026-11-08): `HTTPS_PROXY=HTTP_PROXY=http://127.0.0.1:9 ./lab selftest all` ->
+**63/63 `broken:ok fixed:ok`** (16 learn + 47 incidents: the 53 wave-1 labs on the new controller plus the 10 wave-2
+labs), 68 min, no lab containers left behind (label `ansiblelab.scenario`).
 
 Findings while building wave 2 (now lab content or framework fixes):
 * `#!/usr/bin/env python3` in a module does not run on 2.22 ("The module interpreter '/usr/bin/env python3' was not
