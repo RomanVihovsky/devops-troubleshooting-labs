@@ -27,6 +27,10 @@ cluster_golden() {
   done
   nx k8s-gw "systemctl stop $GW_STATEFUL 2>/dev/null; tar -czf - --ignore-failed-read $(echo "$GW_PATHS" | tr '\n' ' ') 2>/dev/null; rc=\$?
     systemctl start $GW_STATEFUL 2>/dev/null; exit \$rc" </dev/null > "$new/k8s-gw.tgz"
+  # OpenBao on its own (raft snapshot through the API): the fast reset for labs that only touch kv/policies/roles
+  if [ -s "$BAO_DIR/root-token" ]; then
+    bx operator raft snapshot save "$new/openbao.snap" >/dev/null 2>&1 || die "OpenBao raft snapshot failed"
+  fi
   nx "$CP" "etcdctl $ETCD_FLAGS snapshot save /var/tmp/golden-etcd.db >/dev/null && etcdutl snapshot status /var/tmp/golden-etcd.db -w table >&2 && cat /var/tmp/golden-etcd.db && rm -f /var/tmp/golden-etcd.db" \
     </dev/null > "$new/etcd.db" 2> "$new/etcd.status"
   [ -s "$new/etcd.db" ] || die "etcd snapshot failed: $(cat "$new/etcd.status")"
@@ -56,7 +60,8 @@ pkill -CONT -x kubelet 2>/dev/null
 nft delete table inet lab_fault 2>/dev/null
 for dev in enp0s3 enp0s8; do tc qdisc del dev \$dev root 2>/dev/null; done
 systemctl set-property --runtime kubepods.slice CPUQuota= 2>/dev/null
-swapoff -a
+rm -rf /etc/systemd/system/kubepods.slice.d /etc/systemd/system.control/kubepods.slice.d
+swapoff -a; rm -f /swapfile
 # golden files: managed directories are replaced as a whole
 rm -rf /etc/kubernetes /etc/cni/net.d /etc/containerd /var/lib/kubelet/pki /etc/sysctl.d /etc/modules-load.d /etc/chrony \
   /usr/lib/systemd/system/kubelet.service.d /etc/systemd/system/kubelet.service.d
@@ -106,7 +111,31 @@ reset_gw() {
     systemctl start $GW_STATEFUL 2>/dev/null; true" </dev/null
 }
 
-# enable too: a scenario may have disabled kubelet, which would bite at the next reboot
+# reset_openbao: OpenBao back to the golden raft snapshot (kv, policies, auth roles, tokens) - seconds, no gw
+# restart; the static seal and the root token are unchanged
+reset_openbao() {
+  [ -s "$GOLDEN_DIR/openbao.snap" ] || { warn "no OpenBao snapshot in the golden - ./lab cluster golden"; return 1; }
+  bx operator raft snapshot restore "$GOLDEN_DIR/openbao.snap" >/dev/null 2>&1 \
+    || bx operator raft snapshot restore -force "$GOLDEN_DIR/openbao.snap" >/dev/null 2>&1 \
+    || { warn "OpenBao snapshot restore failed"; return 1; }
+  retry 60 bao_unsealed || { warn "OpenBao sealed after the restore"; return 1; }
+  retry 30 bx kv get -mount=secret shop || warn "OpenBao kv not readable after the restore"
+}
+
+extra_apps() { kx -n argocd get applications.argoproj.io -o name 2>/dev/null | grep -vE '/(lab-apps|demo|shop)$'; }
+no_extra_apps() { [ -z "$(extra_apps)" ]; }
+unfinalize_app() { kx -n argocd patch "$1" --type merge -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1; }
+# Argo CD logs "Unable to delete application resources: error getting app project" forever for an app whose
+# AppProject is gone - strip its finalizer at once instead of waiting
+unstick_apps() {
+  local a p
+  for a in $(extra_apps); do
+    p=$(kx -n argocd get "$a" -o jsonpath='{.spec.project}' 2>/dev/null) || continue
+    kx -n argocd get appprojects.argoproj.io "${p:-default}" >/dev/null 2>&1 || unfinalize_app "$a"
+  done
+  no_extra_apps
+}
+
 # reset_gitops_baseline: lab/gitops main back to the tag "baseline" (a normal force-push through Gitea, so its
 # branch view stays right), then Argo CD re-reads it and re-syncs the apps
 reset_gitops_baseline() {
@@ -119,16 +148,22 @@ reset_gitops_baseline() {
   rm -rf "$w"
   argo_refresh lab-apps; argo_sync lab-apps
   for a in demo shop; do argo_refresh "$a"; done
-  # Applications / AppProjects that are not part of the baseline (created with kubectl, or left behind)
-  for a in $(kx -n argocd get applications.argoproj.io -o name 2>/dev/null); do
-    case ${a##*/} in lab-apps|demo|shop) ;; *) kx -n argocd delete "$a" --wait=false >/dev/null 2>&1 ;; esac
-  done
+  # Applications / AppProjects that are not part of the baseline (created with kubectl, or left behind).
+  # Apps first: an app whose AppProject is already gone can't run its resources finalizer and hangs in deletion,
+  # which keeps lab-apps unhealthy. lab-apps' own prune deletes both at once (D04), so strip such an app's
+  # finalizer - its resources live in the scenario's namespaces, which the reset deletes next.
+  for a in $(extra_apps); do kx -n argocd delete "$a" --wait=false >/dev/null 2>&1; done
+  if ! retry 60 unstick_apps; then
+    for a in $(extra_apps); do unfinalize_app "$a"; done
+    retry 30 no_extra_apps || warn "gitops: Applications still terminating: $(extra_apps | tr '\n' ' ')"
+  fi
   for a in $(kx -n argocd get appprojects.argoproj.io -o name 2>/dev/null); do
     case ${a##*/} in lab|default) ;; *) kx -n argocd delete "$a" --wait=false >/dev/null 2>&1 ;; esac
   done
   for a in lab-apps demo shop; do retry 180 argo_app_ok "$a" || warn "argo app $a not Synced/Healthy after the GitOps reset"; done
 }
 
+# enable too: a scenario may have disabled kubelet, which would bite at the next reboot
 start_kubelets() { local n; for n in "$@"; do nx "$n" 'systemctl enable --now containerd kubelet 2>/dev/null' </dev/null; done; }
 
 # cluster_bare_build <version>: a bare cluster (control plane + workers + Calico, no other addons) at an older

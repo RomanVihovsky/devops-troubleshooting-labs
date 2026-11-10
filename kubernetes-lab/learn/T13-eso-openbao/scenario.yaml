@@ -4,6 +4,7 @@ kind: learn
 level: 3
 domain: secrets
 est: 45m
-reset: gw
+reset: ns
 namespaces: [t13]
 gitops: false
+openbao: true

@@ -1,0 +1,10 @@
+id: D01
+title: demo release stuck after the values change - and the greeting never changed
+kind: incident
+level: 2
+domain: delivery
+wave: 1
+est: 20m
+reset: ns
+namespaces: []
+gitops: true

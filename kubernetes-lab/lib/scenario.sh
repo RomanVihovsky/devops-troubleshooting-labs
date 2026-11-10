@@ -78,6 +78,13 @@ docs = [d for d in yaml.safe_load_all(sys.stdin) if d]
 for d in docs: label(d)
 yaml.safe_dump_all(docs, sys.stdout, sort_keys=False)' "$LAB_LABEL" "$LAB_ID" < "$src" | kx apply -f - >/dev/null
 }
+# deploy_ready <ns> <deploy> [n]: the rollout is complete and n (default spec.replicas) replicas are ready
+deploy_ready() {
+  local want=${3:-$(kx -n "$1" get deploy "$2" -o jsonpath='{.spec.replicas}' 2>/dev/null)}
+  [ -n "$want" ] && [ "$(kx -n "$1" get deploy "$2" -o jsonpath='{.status.readyReplicas}/{.status.updatedReplicas}/{.status.replicas}' 2>/dev/null)" = "$want/$want/$want" ]
+}
+# has_endpoints <ns> <service>: the Service has at least one ready endpoint
+has_endpoints() { [ -n "$(kx -n "$1" get endpointslices -l kubernetes.io/service-name="$2" -o jsonpath='{.items[*].endpoints[?(@.conditions.ready==true)].addresses[0]}' 2>/dev/null)" ]; }
 wait_rollout() { kx -n "$1" rollout status "$2" --timeout="${3:-180}s" >/dev/null; }
 restarts() { kx -n "$1" get pods -l "$2" -o jsonpath='{range .items[*]}{.status.containerStatuses[*].restartCount}{" "}{end}' | awk '{ for (i = 1; i <= NF; i++) s += $i } END { print s + 0 }'; }
 # stable_for <seconds> <ns> <selector>: pods Ready and no new restarts during that time
@@ -171,6 +178,19 @@ gitops_commit() {
   git -C "$w" push -q origin main 2>/dev/null
   rm -rf "$w"
 }
+# nodes_normalize: Node objects back to the baseline - uncordoned, zone labels, no taints a person added
+# (control-plane and the node controller's own node.kubernetes.io/* taints stay, except out-of-service)
+nodes_normalize() {
+  local n k
+  for n in $(cluster_nodes); do
+    kx uncordon "$n" >/dev/null 2>&1
+    kx label node "$n" "topology.kubernetes.io/zone=$(zone_of "$n")" --overwrite >/dev/null 2>&1
+    for k in $(kx get node "$n" -o json 2>/dev/null | jq -r '.spec.taints[]? | select((.key | startswith("node.kubernetes.io/") | not)
+               and .key != "node-role.kubernetes.io/control-plane" or .key == "node.kubernetes.io/out-of-service") | .key'); do
+      kx taint node "$n" "$k-" >/dev/null 2>&1
+    done
+  done
+}
 argo_refresh() { kx -n argocd annotate application "$1" argocd.argoproj.io/refresh=hard --overwrite >/dev/null; }
 argo_sync() { kx -n argocd patch application "$1" --type merge -p '{"operation":{"sync":{"revision":"main","prune":true}}}' >/dev/null; }
 
@@ -204,8 +224,13 @@ scenario_cleanup() {
   if [ "$level" = node ]; then
     nodes=$(ylist nodes "$d")
     for n in $nodes; do n=$(node_name "$n"); reset_node_files "$n" </dev/null; start_kubelets "$n"; done
+    retry 180 nodes_ready || warn "not all nodes Ready after the node reset"
   fi
+  # Node objects are shared: cordons, taints, a deleted + re-registered node (zone label) - always normalise
+  nodes_normalize
   [ "$level" = gw ] && reset_gw </dev/null
+  # openbao: true = kv paths, policies or auth roles changed -> the golden raft snapshot (gw already did it)
+  if [ "$(yget openbao "$d")" = true ] && [ "$level" != gw ]; then reset_openbao || return 1; fi
   return 0
 }
 
@@ -336,7 +361,10 @@ cmd_selftest() {
     name=$(basename "$d"); t0=$SECONDS
     echo; info "${C_BOLD}selftest $name${C_0}"
     if ! ( cmd_start "$name" ) >/dev/null; then
-      results+=("$(printf '%-36s SETUP FAILED %5ss' "$name" $((SECONDS - t0)))"); echo "  ${results[-1]}" >> "$SELFTEST_LOG"; continue
+      # keep the setup log: the next start (or the final stop) clears .state/setup.log
+      cp -f "$SETUP_LOG" "$STATE_DIR/selftest-setup-$name.log" 2>/dev/null
+      results+=("$(printf '%-36s SETUP FAILED %5ss  (.state/selftest-setup-%s.log)' "$name" $((SECONDS - t0)) "$name")")
+      echo "  ${results[-1]}" >> "$SELFTEST_LOG"; continue
     fi
     broken=ok; ( LAB_EXPECT_FAIL=1 cmd_verify ) >/dev/null 2>&1 && broken="NOT BROKEN"
     ( cmd_solve ) >/dev/null 2>&1 || true

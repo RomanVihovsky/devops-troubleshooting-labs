@@ -88,7 +88,7 @@ fi
 systemctl enable kubelet >/dev/null 2>&1
 
 say "time from k8s-gw (chrony)"
-sed -i -E 's/^(pool|server) /#\1 /' /etc/chrony/chrony.conf
+sed -i -E 's/^(pool|server) /#\1 /; s/^makestep .*/makestep 1 -1/' /etc/chrony/chrony.conf  # step after a host sleep too
 echo 'server 192.168.56.20 iburst' > /etc/chrony/conf.d/k8slab.conf
 systemctl enable chrony >/dev/null 2>&1; systemctl restart chrony
 

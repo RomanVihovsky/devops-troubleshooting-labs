@@ -52,6 +52,8 @@ systemctl enable haproxy >/dev/null 2>&1; systemctl restart haproxy
 
 say "chrony (NTP server for 192.168.56.0/24)"
 install -m 644 "$SRC/infra/gw/chrony.conf" /etc/chrony/conf.d/k8slab.conf
+# step any offset > 1 s, not only in the first 3 updates: a host that slept leaves the paused VMs hours behind
+sed -i -E 's/^makestep .*/makestep 1 -1/' /etc/chrony/chrony.conf
 systemctl enable chrony >/dev/null 2>&1; systemctl restart chrony
 
 say "NFS /srv/nfs"

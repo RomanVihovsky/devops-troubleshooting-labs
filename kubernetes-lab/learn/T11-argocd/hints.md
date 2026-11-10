@@ -4,8 +4,8 @@
 [CreateNamespace=true]`. Push, then `argocd app get lab-apps --refresh`.
 
 ## Hint 2
-`argocd app get t11` shows a condition like *application destination ... namespace t11 is not permitted in
-project 'lab'* (InvalidSpecError). Add `{server: https://kubernetes.default.svc, namespace: t11}` to
+`argocd app get t11` shows a condition like *application destination server '...' and namespace 't11' do not
+match any of the allowed destinations in project 'lab'* (InvalidSpecError). Add `{server: https://kubernetes.default.svc, namespace: t11}` to
 `spec.destinations` in `apps/project-lab.yaml` and push. An AppProject is the guard rail: allowed source
 repos, destinations, cluster-scoped kinds.
 

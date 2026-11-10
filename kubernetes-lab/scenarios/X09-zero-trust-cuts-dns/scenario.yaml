@@ -1,0 +1,10 @@
+id: X09
+title: shop down after the zero-trust rollout - DNS and the DB password never arrive
+kind: incident
+level: 2
+domain: networkpolicy
+wave: 1
+est: 30m
+reset: ns
+namespaces: []
+gitops: false

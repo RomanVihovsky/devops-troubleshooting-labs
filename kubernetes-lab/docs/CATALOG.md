@@ -152,7 +152,7 @@ from inside the cluster.
 | X06 | Egress to external payment API blocked | 2 | ns | `ipBlock` with `except` covering the target | external endpoint reachable, everything else denied |
 | X07 | New pods on one node have no network | 3 | cluster | calico-node DS `IP_AUTODETECTION_METHOD=first-found` + `updateStrategy: OnDelete`; only the `k8s-w3` pod restarted, so w3 registers the NAT `10.0.2.15` every VM shares | calico-node Ready everywhere, every node's Calico address on 192.168.56.0/24, matrix green |
 | X08 | Pods stuck `ContainerCreating`: "failed to allocate IP" | 3 | cluster | Calico IPPool /26 with blockSize /29 exhausted | all pods Running (pool extended) |
-| X09 | `shop` down after the "zero trust" rollout: DB password never arrives, DNS fails | 2 | ns | default-deny ingress+egress in `shop` and `external-secrets`; no allow for DNS or ESO → OpenBao `192.168.56.20:8200` | app Ready, ExternalSecret Ready, default-deny kept; only DNS + `192.168.56.20/32:8200` added (other egress still blocked) |
+| X09 | `shop` down after the "zero trust" rollout: DNS and the DB password never arrive | 2 | ns + cleanup.sh | `default-deny` (in+out) in `shop`, `default-deny-egress` in `external-secrets` | deny policies unchanged, shop e2e, ESO refresh, frontend→db and api→gw:22 blocked |
 | X10 | Argo CD: every app `ComparisonError ... dial tcp 192.168.56.20:3000: i/o timeout` | 2 | ns | "hardening" default-deny egress in `argocd` allows DNS only; repo-server can't reach Gitea | apps Synced; repo-server egress = DNS + Gitea `:3000` only, policy kept |
 
 ## V - Storage (10)
@@ -163,7 +163,7 @@ from inside the cluster.
 | V02 | PVC `Pending`, "no persistent volumes available and no storage class is set" | 2 | ns | default-class annotation removed from local-path | Bound (default restored or class set) |
 | V03 | Restored PV can't be reused | 2 | ns | PV `Released` with stale `claimRef`, Retain policy | new PVC Bound to that PV, data intact |
 | V04 | Second replica `Pending`: "volume node affinity conflict" | 2 | ns | RWO local-path PVC shared by a 2-replica Deployment | app Ready (StatefulSet with per-pod PVC or 1 replica per ticket) |
-| V05 | App: "permission denied" writing to its volume | 2 | ns | runAsUser 1000, volume root-owned, no fsGroup | writes succeed (fsGroup) |
+| V05 | App: "permission denied" writing to its volume | 2 | ns | runAsUser 1000, volume root-owned, no fsGroup - **wave 2**: local-path volumes are hostPath (no fsGroup); needs an fsGroup-capable volume | writes succeed (fsGroup) |
 | V06 | Can't grow StatefulSet disks: "updates to statefulset spec ... forbidden" | 3 | ns | change `volumeClaimTemplates` size | PVCs resized (expansion + `--cascade=orphan` recreate) |
 | V07 | PVC resize request ignored | 2 | ns | nfs-csi StorageClass copy with `allowVolumeExpansion: false` | PVC capacity = requested |
 | V08 | PVC stuck `Terminating` | 1 | ns | `kubernetes.io/pvc-protection` while a pod still mounts it | PVC deleted, app migrated per ticket |
@@ -193,7 +193,7 @@ from inside the cluster.
 | ID | Ticket | Lvl | Reset | Emulation | Verify |
 |---|---|---|---|---|---|
 | K01 | `kubectl`: "connection to the server ... was refused" | 2 | cluster | apiserver manifest `--etcd-servers=https://127.0.0.1:2397` | apiserver healthy, `kubectl get nodes` works |
-| K02 | apiserver gone after "hardening" (3 mistakes, one in metadata) | 3 | cluster | bad flag, wrong cert path, invalid label | healthy |
+| K02 | apiserver gone after "hardening" (3 mistakes, one in metadata) | 3 | cluster | `--enable-admission-plugins=...,PodSecurityPolicy`, `--tls-cert-file=.../apiserver.cert`, label value with a space (kubelet rejects the manifest); `--profiling=false` is valid | API up, mirror pod Ready, profiling off kept, valid plugins, cert files exist, 4 manifests |
 | K03 | New pods stay `Pending`, no scheduler events | 2 | cluster | scheduler manifest image typo | test pod scheduled |
 | K04 | Deployments don't create pods, scale does nothing | 2 | cluster | controller-manager `--kubeconfig` path wrong | RS reconcile works |
 | K05 | Whole control plane down after disk move | 3 | cluster | etcd `--data-dir` changed, hostPath not updated | etcd healthy, **data preserved** (old objects still there) |
@@ -215,8 +215,8 @@ from inside the cluster.
 | ID | Ticket | Lvl | Reset | Emulation | Verify |
 |---|---|---|---|---|---|
 | L01 | `k8s-w2` `NotReady` | 1 | node | `systemctl stop kubelet` (and `disable`) on node | node Ready, kubelet enabled |
-| L02 | Node NotReady: "container runtime is down" | 2 | node | containerd stopped / socket path changed in kubelet flags | Ready |
-| L03 | kubelet crashloops after config change | 2 | node | `cgroupDriver: cgroupfs` in kubelet config (runtime uses systemd) | Ready |
+| L02 | Node NotReady: "container runtime is down" | 2 | node | containerd config: an appended `[plugins.'io.containerd.cri.v1.images'` header without `]` (and the table already exists) | containerd up, config loads, `max_concurrent_downloads = 10` kept, w1 Ready + runs pods |
+| L03 | kubelet crashloops after config change | 2 | node | `evictionHard: {memory.available: 200MB}` (MB is not a quantity) in `/var/lib/kubelet/config.yaml` on w2 | Ready, tuning kept as 200Mi/200M + nodefs 10% |
 | L04 | Node NotReady: "network plugin is not ready: cni config uninitialized" | 2 | node | `/etc/cni/net.d/*` removed on node | Ready, pods networked |
 | L05 | Node NotReady after "control-plane IP change" | 2 | node | kubelet.conf server URL wrong port | Ready |
 | L06 | `kubectl logs/exec` fail for pods on one node, pods run fine | 3 | node | `--node-ip` dropped from `kubeadm-flags.env` on `k8s-w2`: InternalIP becomes the NAT `10.0.2.15` every VM shares | w2 InternalIP 192.168.56.32, logs/exec work on all nodes |
@@ -267,10 +267,10 @@ to `main` from `workspace/gitops`, not a live `kubectl` patch.
 
 | ID | Ticket | Lvl | Reset | Emulation | Verify |
 |---|---|---|---|---|---|
-| D01 | `labapp` broken right after a values change | 2 | ns | `envs/dev/values.yaml` key typo `servcie.targetPort: 8080` (silently ignored, chart default 80 used) + `image.tag: 1.4.0` | Synced/Healthy, curl-probe 200, fix in Git |
+| D01 | demo release "1.4 + Bonjour" never arrived | 2 | ns + gitops | commit to `envs/demo/values.yaml`: `image.tag: "1.4.0"` (doesn't exist) + `app.greting: Bonjour` (unknown key, silently ignored) | Synced/Healthy, rollout on an existing tag, `/` says Bonjour, fix in Git |
 | D02 | Argo CD shows `labapp` OutOfSync: someone "hotfixed" prod | 2 | ns | `kubectl scale --replicas=1` + `kubectl set env FEATURE_X=on` on the live Deployment; auto-sync on, self-heal off | Synced; `FEATURE_X=on` now comes from Git (wanted per ticket), replicas = Git (3) |
-| D03 | Auto-sync deployed a bad commit: Argo CD says Synced, the app is down | 2 | ns | commit to `main` with image `labapp:2.0.0-rc1` (crashes on start): sync OK, health `Degraded` | `main` reverted, Synced + Healthy, auto-sync still on |
-| D04 | `payments` won't sync: "application destination ... is not permitted in project" | 2 | ns | AppProject `team-a` destinations lack namespace `payments`; `clusterResourceWhitelist` empty but the app ships its Namespace | Synced/Healthy; `team-a` still denied `kube-system` and other cluster-scoped kinds |
+| D03 | Auto-sync deployed a bad commit: Argo CD says Synced, demo is down | 2 | ns + gitops | commit to `main`: `labapp:2.0.0-rc1` (exits at start) + `strategy: Recreate` → 503 | demo 200, Synced + Healthy, no RC on `main` but the RC commit still in history (revert), auto-sync + selfHeal on |
+| D04 | `payments` won't sync: "destination ... do not match any of the allowed destinations in project team-a" | 2 | ns + gitops | new AppProject `team-a` (destination typo `payment`) + app `payments` via Git | Synced/Healthy, still in `team-a`, explicit destinations (no `*`), sourceRepos unchanged |
 | D05 | Every app `Unknown`: "repository not accessible: authentication required" | 1 | ns | Gitea password of `argocd` rotated; repo Secret still holds the old one | repo connection Successful, apps Synced, credentials only in the repo Secret |
 | D06 | `labapp` flips OutOfSync every few minutes, nobody touched it | 2 | ns | chart renders `replicas: 2` while an HPA scales the Deployment; self-heal fights the HPA | Synced for 5 min under load, HPA owns replicas (field dropped from Git or `ignoreDifferences`) |
 | D07 | Sync fails: "spec.selector: Invalid value ... field is immutable" | 2 | ns | chart bump adds `app.kubernetes.io/version` to `selector.matchLabels` | Synced/Healthy; selector stable across versions (chart fixed, not `Replace=true`) |
@@ -284,9 +284,9 @@ to `main` from `workspace/gitops`, not a live `kubectl` patch.
 
 | ID | Ticket | Lvl | Reset | Emulation | Verify |
 |---|---|---|---|---|---|
-| Y01 | `labapp` in `prod`: secret `db-creds` not found, though the SealedSecret is in Git | 2 | ns | SealedSecret sealed (strict scope) for namespace `dev`, committed under `envs/prod`: "no key could decrypt secret" | Secret `db-creds` in `prod` (resealed for `prod`, still strict), pod Ready, no plaintext in Git |
+| Y01 | demo: rotated token rejected (401), the old one still works | 2 | ns + gitops | the new token sealed (strict) for `demo-staging` (where it decrypts) and committed for demo: "no key could decrypt secret", the old Secret stays | new token 200, old 401, SealedSecret Synced, sealed in Git |
 | Y02 | After the cluster rebuild every SealedSecret fails to decrypt | 3 | cluster | sealing key Secrets deleted + controller restarted (new key generated); backup in `.state/sealed-secrets-key.yaml` | old key restored + controller restarted, all SealedSecrets Synced, Git untouched (no reseal) |
-| Y03 | ExternalSecret `SecretSyncedError`, app has no DB password | 2 | ns | `remoteRef.key: labapp/database`; the kv-v2 secret lives at `labapp/db` | ExternalSecret Ready, Secret keys present (values not printed), pod Ready, fix in Git |
+| Y03 | shop down: ExternalSecret SecretSyncedError after a "path cleanup" | 2 | ns + gitops + openbao | `secret.externalSecret.remoteKey: shop/app` (kv is at `secret/shop`); setup deletes `shop-secrets` and the pods | ExternalSecret Ready, 3 keys, shop e2e, fix in Git, nothing copied in OpenBao |
 | Y04 | ExternalSecrets in `prod` fail: OpenBao `permission denied` | 2 | ns | OpenBao role `prod` bound to SA `default`; the SecretStore authenticates as `eso-reader` | store + ExternalSecrets Ready; role bound to exactly `prod/eso-reader` (no `*`) |
 | Y05 | ClusterSecretStore not Ready: "x509: certificate signed by unknown authority" | 2 | ns | `caProvider` ConfigMap `lab-ca` holds a pre-rotation lab CA | store Ready over `https://` with `caProvider` = current lab CA |
 | Y06 | All ExternalSecrets failing since gateway maintenance | 1 | ns | `systemctl restart openbao` on `k8s-gw`: it comes back sealed | OpenBao unsealed, ExternalSecrets Ready after a forced refresh |

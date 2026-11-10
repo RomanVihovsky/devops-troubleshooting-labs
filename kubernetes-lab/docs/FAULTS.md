@@ -9,7 +9,7 @@ operators observe), never the keystrokes. `solve.sh` is the reference fix that `
 
 ```
 scenarios/<ID>-kebab/            (learn/T..-kebab/ for the learn track: same files, kind: learn)
-  scenario.yaml   id, title, kind, level (1-3), domain, wave, est, reset, namespaces, nodes, gitops, [pilot]
+  scenario.yaml   id, title, kind, level (1-3), domain, wave, est, reset, namespaces, nodes, gitops, [openbao, pilot]
   ticket.md       "# Title", the incident as the reporter sees it, and a **Test**: line (what verify checks)
   hints.md        3 x "## Hint n": where to look -> what's wrong -> how to fix
   manifests/      optional: copied to workspace/<ID>/ ("as found", ./lab diff shows the student's changes)
@@ -38,6 +38,18 @@ Add **`gitops: true`** when the scenario commits to `lab/gitops`. The cleanup th
 `baseline` to `main`, and Argo CD re-syncs and waits until `lab-apps`, `demo` and `shop` are Synced and
 Healthy. The student also gets `workspace/gitops`.
 
+Add **`openbao: true`** when setup or the student may change OpenBao (kv paths, policies, auth roles). The
+cleanup then restores the raft snapshot that `./lab cluster golden` saved (`.state/golden/openbao.snap`), in
+about 7 s, with the same root token. ESO picks the store up again by itself. This is much cheaper than `gw`.
+
+Every cleanup also **normalizes the Node objects**:
+- it uncordons every node;
+- it puts back the `topology.kubernetes.io/zone` labels;
+- it removes the taints a scenario may add, keeping the control-plane taint and the kubelet's own
+  `node.kubernetes.io/*` taints, but removing `out-of-service`.
+
+Any other Node labels a scenario adds (e.g. `disktype`) go in its `cleanup.sh`.
+
 **Rule of thumb**: if setup or a plausible wrong fix can change an object you didn't create, use `cluster`.
 After every cleanup, `cluster_quick` checks nodes, system pods and Argo apps. If that fails, the next `start`
 escalates to a full `cluster reset` by itself.
@@ -56,6 +68,7 @@ escalates to a full `cluster reset` by itself.
 | `answer key` / `answered key truth [alt..]` | exploration labs: the student's `workspace/<ID>/answers.yaml` vs. the live value (trimmed, case-insensitive) |
 | `cluster_bare_build <version>` | a bare cluster (control plane + workers + Calico) at an older version, cp1's PKI kept (CA + SA key: the desktop kubeconfig stays valid) - for upgrade labs; needs `reset: cluster` |
 | `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready and no restarts for s seconds" |
+| `deploy_ready ns name [n]` / `has_endpoints ns svc` | ready = updated = total replicas (n, default spec.replicas) / the Service has a ready EndpointSlice address |
 | `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view |
 | `fault_partition node` / `fault_clear node` | cut a node off the cluster network (nft table `lab_fault`), keep the desktop's SSH |
 | `gitops_commit "msg" <<'EOF' ... EOF` | change lab/gitops as a colleague (`dev-bob`), pushed to `main` |
@@ -78,6 +91,9 @@ Gotchas:
 - **An Argo CD sync only reverts what Git declares.** A field added by hand that Git never had (an extra env
   var, label or annotation) survives a sync and self-heal, and the app still says Synced. If a GitOps
   scenario's setup adds one, its solve and hints must remove it explicitly (D02).
+- **`cleanup.sh` is for shared state the reset level doesn't own**: Node labels (S02), the default
+  StorageClass annotation (V02), NetworkPolicies in namespaces the scenario doesn't own (X09), static PVs
+  and their NFS directories (V03), a Role in `default` (A01).
 - **Selftest output belongs in `.state/`, not `/tmp`.** The desktop's `/tmp` is wiped at boot.
   `./lab selftest` appends every result line to `.state/selftest.log`.
 
