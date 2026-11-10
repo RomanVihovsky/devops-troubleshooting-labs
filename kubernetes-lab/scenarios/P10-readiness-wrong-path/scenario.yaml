@@ -1,0 +1,10 @@
+id: P10
+title: Pods Running but 0/1 Ready, the Service times out
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [quotes]
+gitops: false

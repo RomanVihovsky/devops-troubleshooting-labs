@@ -1,0 +1,10 @@
+id: S06
+title: Pods Pending after maintenance - nodes unschedulable
+kind: incident
+level: 1
+domain: scheduling
+wave: 1
+est: 10m
+reset: ns
+namespaces: [notify]
+gitops: false

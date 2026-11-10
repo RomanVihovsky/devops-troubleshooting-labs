@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: render, namespace: render}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: render}}
+  template:
+    metadata: {labels: {app: render}}
+    spec:
+      containers:
+        - name: render
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: render}]
+          resources:
+            requests: {cpu: "16", memory: 64Mi}

@@ -30,14 +30,14 @@ from inside the cluster.
 | P01 | New release never starts: `ImagePullBackOff` | 1 | ns | Deployment image tag `labapp:1.4.0` (only `1.4` exists in the registry) | rollout complete, all replicas Ready, image still `labapp` family |
 | P02 | Private image can't be pulled, public ones fine | 2 | ns | image on the htpasswd registry (`k8s-gw:5001`); no `imagePullSecrets`; a correct-looking secret exists in **another** namespace | pods Ready; secret lives in the app namespace (no registry auth removed) |
 | P03 | Pod crashes instantly, logs say `exec format error` | 2 | ns | `arm64` variant pushed under the amd64 tag | pods Ready on amd64 image (multi-arch or correct tag) |
-| P04 | `CrashLoopBackOff` right after deploy, works in dev | 1 | ns | labapp exits 1 when `DATABASE_URL` missing; env var renamed `DB_URL` in manifest | Ready, restartCount stops increasing for 60 s |
+| P04 | `CrashLoopBackOff` right after deploy, works in dev | 1 | ns | labapp exits 1 when `DATABASE_URL` missing; env var renamed `DB_URL` in manifest | Ready, no new restarts for 60 s, `REQUIRED_ENV` unchanged |
 | P05 | `CrashLoopBackOff` but logs show "done" and exit code 0 | 2 | ns | Deployment runs a one-shot migration command (exits 0) with `restartPolicy: Always` | migration moved to a Job (Completed) + web Deployment Ready |
 | P06 | `CreateContainerConfigError` | 1 | ns | `secretKeyRef` key `password` but Secret has `passwd` | pods Ready, secret value unchanged |
-| P07 | `RunContainerError: exec: "gunicorn": executable file not found` | 1 | ns | `command:` overrides entrypoint with a binary not in the image | pods Ready, readiness passes |
-| P08 | Pods restart under load, `Last State: OOMKilled` (137) | 1 | ns | labapp cache 192 Mi, limit 128 Mi | stable 60 s under load, `CACHE_MB` unchanged |
+| P07 | `RunContainerError: exec: "gunicorn": executable file not found` | 1 | ns | `command:` overrides entrypoint with a binary not in the image | pods Ready, same image (`labapp:1.4`) |
+| P08 | Pods restart under load, `Last State: OOMKilled` (137) | 1 | ns | labapp cache 192 Mi, limit 128 Mi | Ready, no new restarts for 60 s, `CACHE_MB` unchanged |
 | P09 | Healthy app killed every ~30 s | 1 | ns | liveness probe on port 8081 (app listens 8080) | no liveness kills for 60 s, liveness still present |
 | P10 | Pods Running but `0/1 Ready`; Service times out | 1 | ns | readiness `/healthz` (app serves `/health`) | Ready; Service endpoints populated; curl-probe 200 |
-| P11 | Pods never get past startup on big datasets | 2 | ns | app needs 45 s warm-up; liveness initialDelay 10 s, no startupProbe | Ready, 0 restarts for 90 s, liveness kept (startupProbe added) |
+| P11 | Pods never get past startup on big datasets | 2 | ns | app needs 45 s warm-up; liveness initialDelay 10 s, no startupProbe | Ready, no new restarts for 60 s, liveness and the 45 s warm-up unchanged (startupProbe added) |
 | P12 | Pods stuck in `Init:0/1` | 1 | ns | init container waits for `nslookup postgres` (service is `postgresql`) | Running/Ready, init container still present |
 | P13 | `kubectl delete pod` hangs, pod stays `Terminating` | 2 | ns | pod with custom finalizer `example.com/cleanup` + app ignores SIGTERM, grace 600 s | pod gone; Deployment healthy; explain finalizer in solution |
 | P14 | Job never reaches Completed although the work is done | 3 | ns | Job with a log-shipper sidecar as a regular container (never exits) | Job Complete (native sidecar `restartPolicy: Always` initContainer) |
@@ -64,14 +64,14 @@ from inside the cluster.
 | S01 | New pods `Pending`: "Insufficient cpu" | 1 | ns | `requests.cpu: "16"` | Running, requests realistic (< 1 CPU) |
 | S02 | `Pending`: "didn't match Pod's node affinity/selector" | 1 | ns | `nodeSelector: disktype: ssd`, nodes labelled `disk=ssd` | Running on the ssd node |
 | S03 | `Pending`: "untolerated taint" | 1 | ns | all workers tainted `dedicated=batch:NoSchedule` | Running on workers with a toleration (taints stay) |
-| S04 | Scaled to 5, two replicas stay `Pending` | 2 | ns | required podAntiAffinity per hostname, 3 workers | 5 Running (preferred anti-affinity or spread) |
+| S04 | Scaled to 5, two replicas stay `Pending` | 2 | ns | required podAntiAffinity per hostname, 3 workers | 5 Ready, on all 3 workers (soft spread or preferred anti-affinity) |
 | S05 | `Pending` although the cluster is half empty | 3 | ns | topologySpreadConstraints `zone`, maxSkew 1, DoNotSchedule; zones uneven (zone-a: w1, w2; zone-b: w3) | all Running, spread constraint kept (ScheduleAnyway or labels fixed) |
 | S06 | Pods `Pending` after maintenance: "unschedulable" | 1 | ns | all workers cordoned | Running; nodes uncordoned |
 | S07 | Pod `Pending` forever, **no events at all** | 2 | ns | `schedulerName: custom-scheduler` (doesn't exist) | Running via default scheduler |
 | S08 | Pod never scheduled, not even `Pending` events, node name looks right | 2 | ns | `nodeName: k8s-w4` (the spare VM, never joined) | Running |
 | S09 | Log agent missing on the control-plane node | 1 | ns | DaemonSet without control-plane toleration | DS desired = number of nodes (4) |
 | S10 | Web pods evicted whenever the batch job starts | 3 | ns | batch PriorityClass 1e6 + preemption, web has none | batch runs without preempting web (PriorityClass/preemptionPolicy) |
-| S11 | `Pending`: "didn't have free ports for the requested pod ports" | 2 | ns | `hostPort: 8080` used by a DaemonSet | all Running (no hostPort or different) |
+| S11 | `Pending`: "didn't have free ports for the requested pod ports" | 2 | ns | `hostPort: 8080` used by a DaemonSet | edge-proxy Ready and serving; node-probe keeps hostPort 9100 on every worker |
 | S12 | `Pending`: "Too many pods" on an idle cluster | 2 | node | kubelet `maxPods: 8` on workers (`/var/lib/kubelet/config.yaml`) | all Running (maxPods raised) |
 | S13 | Pod affinity Pending: wants to sit next to cache | 2 | ns | required podAffinity to label `app=cache` (pods are `app=redis-cache`) | Running co-located with cache |
 | S14 | Pod requests GPU/extended resource, Pending | 2 | ns | `requests: example.com/gpu: 1`, no node advertises it | Running (resource advertised via node status patch or request removed per ticket) |
@@ -115,7 +115,7 @@ from inside the cluster.
 | N01 | Service times out, pods healthy | 1 | ns | selector `app: backend` vs pod label `app: back-end` | endpoints populated, curl-probe 200 |
 | N02 | `connection refused` via Service, pod works via its IP:8080 | 1 | ns | `targetPort: 80`, container listens 8080 | curl-probe 200 |
 | N03 | Service has endpoints but connections fail | 2 | ns | `targetPort: http`, container port named `web` | curl-probe 200 |
-| N04 | NodePort works on some nodes only | 2 | ns | `externalTrafficPolicy: Local`, pods on one node | NodePort answers on every node (Cluster, or DaemonSet per ticket) |
+| N04 | NodePort works on some nodes only | 2 | ns | `externalTrafficPolicy: Local`, pods on one node | NodePort 30480 answers 200 on every worker, from the desktop |
 | N05 | Pods in `frontend` can't reach `api` | 1 | ns | client uses `http://api` across namespaces | curl from frontend 200 (FQDN/short svc.ns) |
 | N06 | Nothing resolves cluster-wide, CoreDNS `CrashLoopBackOff` | 2 | ns | Corefile `forward . 127.0.0.1` -> loop plugin aborts | CoreDNS Ready, cluster + external names resolve |
 | N07 | Internal names resolve, external don't | 2 | ns | Corefile `forward . 10.255.255.1` (dead upstream) | external name resolves from a pod |
@@ -162,7 +162,7 @@ from inside the cluster.
 | V01 | PVC `Pending` forever | 1 | ns | `storageClassName: fast-ssd` (doesn't exist) | Bound, pod Running |
 | V02 | PVC `Pending`, "no persistent volumes available and no storage class is set" | 2 | ns | default-class annotation removed from local-path | Bound (default restored or class set) |
 | V03 | Restored PV can't be reused | 2 | ns | PV `Released` with stale `claimRef`, Retain policy | new PVC Bound to that PV, data intact |
-| V04 | Second replica `Pending`: "volume node affinity conflict" | 2 | ns | RWO local-path PVC shared by a 2-replica Deployment | app Ready (StatefulSet with per-pod PVC or 1 replica per ticket) |
+| V04 | Second replica `Pending`: "volume node affinity conflict" | 2 | ns | RWO local-path PVC shared by a 2-replica Deployment | 2 pods Ready on different nodes, each with its own local-path PVC (StatefulSet) |
 | V05 | App: "permission denied" writing to its volume | 2 | ns | runAsUser 1000, volume root-owned, no fsGroup - **wave 2**: local-path volumes are hostPath (no fsGroup); needs an fsGroup-capable volume | writes succeed (fsGroup) |
 | V06 | Can't grow StatefulSet disks: "updates to statefulset spec ... forbidden" | 3 | ns | change `volumeClaimTemplates` size | PVCs resized (expansion + `--cascade=orphan` recreate) |
 | V07 | PVC resize request ignored | 2 | ns | nfs-csi StorageClass copy with `allowVolumeExpansion: false` | PVC capacity = requested |

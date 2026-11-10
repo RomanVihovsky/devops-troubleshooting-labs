@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: orders-api, namespace: orders-db}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: orders-api}}
+  template:
+    metadata: {labels: {app: orders-api}}
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: registry.lab:5000/lab/labapp:1.4
+          args: [wait-for, postgres, --timeout, "3600"]
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: orders-api}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

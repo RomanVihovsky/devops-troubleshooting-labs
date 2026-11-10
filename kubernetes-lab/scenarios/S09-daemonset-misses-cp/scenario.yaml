@@ -1,0 +1,10 @@
+id: S09
+title: Log agent missing on the control-plane node
+kind: incident
+level: 1
+domain: scheduling
+wave: 1
+est: 10m
+reset: ns
+namespaces: [logging]
+gitops: false

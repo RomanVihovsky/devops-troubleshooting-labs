@@ -4,5 +4,5 @@ no_persistent() {
 }
 check "kubepods.slice cpu.max = max on k8s-w1" uncapped
 check "no CPUQuota drop-in left for kubepods.slice (survives a reboot)" no_persistent
-check_eventually 120 "search pods Ready with no new restarts for 60 s" stable_for 60 search app=search
+check_eventually 200 "search pods Ready with no new restarts for 60 s" stable_for 60 search app=search
 verdict

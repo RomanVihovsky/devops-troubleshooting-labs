@@ -1,0 +1,10 @@
+id: S08
+title: Pod never starts, node name looks right
+kind: incident
+level: 2
+domain: scheduling
+wave: 1
+est: 10m
+reset: ns
+namespaces: [legacy]
+gitops: false

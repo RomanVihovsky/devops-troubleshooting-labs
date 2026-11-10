@@ -1,0 +1,10 @@
+id: P12
+title: Pods stuck in Init:0/1
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [orders-db]
+gitops: false

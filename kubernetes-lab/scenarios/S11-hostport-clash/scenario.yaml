@@ -1,0 +1,10 @@
+id: S11
+title: Pending - didn't have free ports for the requested pod ports
+kind: incident
+level: 2
+domain: scheduling
+wave: 1
+est: 15m
+reset: ns
+namespaces: [edge]
+gitops: false

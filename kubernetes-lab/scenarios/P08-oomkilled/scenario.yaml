@@ -1,0 +1,10 @@
+id: P08
+title: Pods restart under load - Last State OOMKilled (137)
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [search-cache]
+gitops: false

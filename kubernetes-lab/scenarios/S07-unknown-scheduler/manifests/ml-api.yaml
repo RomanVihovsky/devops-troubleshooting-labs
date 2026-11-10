@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ml-api, namespace: ml}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ml-api}}
+  template:
+    metadata: {labels: {app: ml-api}}
+    spec:
+      schedulerName: gpu-scheduler
+      containers:
+        - {name: api, image: registry.lab:5000/lab/labapp:1.4, env: [{name: APP_NAME, value: ml-api}]}

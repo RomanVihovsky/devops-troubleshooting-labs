@@ -90,9 +90,25 @@ deploy_ready() {
 has_endpoints() { [ -n "$(kx -n "$1" get endpointslices -l kubernetes.io/service-name="$2" -o jsonpath='{.items[*].endpoints[?(@.conditions.ready==true)].addresses[0]}' 2>/dev/null)" ]; }
 wait_rollout() { kx -n "$1" rollout status "$2" --timeout="${3:-180}s" >/dev/null; }
 restarts() { kx -n "$1" get pods -l "$2" -o jsonpath='{range .items[*]}{.status.containerStatuses[*].restartCount}{" "}{end}' | awk '{ for (i = 1; i <= NF; i++) s += $i } END { print s + 0 }'; }
-# stable_for <seconds> <ns> <selector>: pods Ready and no new restarts during that time
+# crashlooping <ns> <selector>: a container waits in CrashLoopBackOff or has failed and restarted at least twice.
+# Polling only the waiting reason misses it: between restarts the state is running or terminated.
+crashlooping() {
+  kx -n "$1" get pods -l "$2" -o json 2>/dev/null | jq -e '[.items[].status.containerStatuses[]?
+    | select(.state.waiting.reason == "CrashLoopBackOff" or (.restartCount >= 2 and (.lastState.terminated.exitCode // 0) != 0))]
+    | length > 0' >/dev/null
+}
+# restarted_within <ns> <selector> <seconds>: a container of those pods last terminated less than <seconds> ago
+restarted_within() {
+  local since; since=$(date -u -d "-$3 seconds" +%FT%TZ)
+  kx -n "$1" get pods -l "$2" -o json 2>/dev/null \
+    | jq -e --arg s "$since" '[.items[].status.containerStatuses[]?.lastState.terminated.finishedAt // empty | select(. > $s)] | length > 0' >/dev/null
+}
+# stable_for <seconds> <ns> <selector>: pods Ready, no restart during the last <seconds> and none while we watch.
+# The look-back matters: a pod killed every ~40 s (P09, liveness on a wrong port) is Ready between the kills,
+# and selftest's broken pass only watches for 3 s.
 stable_for() {
   local t=$1 ns=$2 sel=$3 r0
+  restarted_within "$ns" "$sel" "$t" && return 1
   [ -n "${LAB_EXPECT_FAIL:-}" ] && t=3
   kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=60s >/dev/null 2>&1 || return 1
   r0=$(restarts "$ns" "$sel"); sleep "$t"
