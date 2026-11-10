@@ -1,0 +1,10 @@
+id: K03
+title: New pods stay Pending, not a single scheduler event
+kind: incident
+level: 2
+domain: control-plane
+wave: 1
+est: 15m
+reset: cluster
+namespaces: [ops]
+gitops: false

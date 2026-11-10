@@ -1,0 +1,11 @@
+id: L11
+title: k8s-w3 unreachable - web moved, but db-0 stays Terminating
+kind: incident
+level: 3
+domain: nodes
+wave: 1
+est: 30m
+reset: node
+nodes: [w3]
+namespaces: [inventory]
+gitops: false

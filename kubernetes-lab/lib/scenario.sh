@@ -55,8 +55,11 @@ run_lab_script() {
     source "$LAB_DIR/lib/upgrade.sh"; source "$LAB_DIR/lib/golden.sh"; source "$LAB_DIR/lib/gitops.sh"
     source "$LAB_DIR/lib/scenario.sh"
     if [ -f "$STATE_DIR/scenario.env" ]; then set -a; source "$STATE_DIR/scenario.env"; set +a; fi
+    case $- in *e*) trap "lab_err_trap \$? \$LINENO" ERR ;; esac
     cd "$2" && source "$1"' _ "$script" "$dir"
 }
+# set -e scripts (setup/solve) would otherwise die silently on a failing command that is not `die`
+lab_err_trap() { echo "✘ line $2: exit $1: ${BASH_COMMAND:0:160}" >&2; }
 
 # --------------------------------------------------------------- helpers ----
 # kns <ns>...: namespaces owned by the running scenario (deleted by its cleanup)
@@ -217,14 +220,16 @@ scenario_cleanup() {
   [ -z "$ns" ] || kx delete namespace $ns --ignore-not-found --wait=false >/dev/null 2>&1
   kinds=$(kx api-resources --verbs=list,delete -o name 2>/dev/null | grep -vE '^(events|events.events.k8s.io|namespaces)$' | paste -sd,)
   kx delete "$kinds" -A -l "$LAB_LABEL=$id" --ignore-not-found --wait=false >/dev/null 2>&1 || true
-  if [ -n "$ns" ]; then
-    # shellcheck disable=SC2086
-    kx wait --for=delete namespace $ns --timeout=120s >/dev/null 2>&1 || warn "namespace(s) $ns still terminating"
-  fi
+  # node reset before waiting for the namespaces: pods on a partitioned or broken node can't finish
+  # terminating until its kubelet is back (L11/L12)
   if [ "$level" = node ]; then
     nodes=$(ylist nodes "$d")
     for n in $nodes; do n=$(node_name "$n"); reset_node_files "$n" </dev/null; start_kubelets "$n"; done
     retry 180 nodes_ready || warn "not all nodes Ready after the node reset"
+  fi
+  if [ -n "$ns" ]; then
+    # shellcheck disable=SC2086
+    kx wait --for=delete namespace $ns --timeout=120s >/dev/null 2>&1 || warn "namespace(s) $ns still terminating"
   fi
   # Node objects are shared: cordons, taints, a deleted + re-registered node (zone label) - always normalise
   nodes_normalize

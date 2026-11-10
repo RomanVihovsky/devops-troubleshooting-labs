@@ -1,0 +1,11 @@
+id: L05
+title: k8s-w1 NotReady after the "control-plane IP change"
+kind: incident
+level: 2
+domain: nodes
+wave: 1
+est: 15m
+reset: node
+nodes: [w1]
+namespaces: []
+gitops: false

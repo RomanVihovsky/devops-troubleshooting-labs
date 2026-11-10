@@ -1,0 +1,11 @@
+id: L14
+title: k8s-w2 NotReady after a routine reboot
+kind: incident
+level: 2
+domain: nodes
+wave: 1
+est: 20m
+reset: node
+nodes: [w2]
+namespaces: []
+gitops: false

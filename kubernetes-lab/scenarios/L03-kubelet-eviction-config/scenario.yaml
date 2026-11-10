@@ -1,0 +1,11 @@
+id: L03
+title: kubelet crashloops on k8s-w2 after a config change
+kind: incident
+level: 2
+domain: nodes
+wave: 1
+est: 15m
+reset: node
+nodes: [w2]
+namespaces: []
+gitops: false

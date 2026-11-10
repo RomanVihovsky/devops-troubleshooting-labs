@@ -1,0 +1,22 @@
+# checkout api - "flap protection": don't move pods for short network blips
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: api, namespace: checkout}
+spec:
+  replicas: 3
+  selector: {matchLabels: {app: api}}
+  template:
+    metadata: {labels: {app: api}}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm: {topologyKey: kubernetes.io/hostname, labelSelector: {matchLabels: {app: api}}}
+      tolerations:
+        - {key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 3600}
+        - {key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 3600}
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
