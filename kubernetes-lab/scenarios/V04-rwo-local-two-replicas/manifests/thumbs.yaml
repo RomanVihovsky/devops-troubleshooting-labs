@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: thumbs-cache, namespace: thumbs}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 64Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: thumbs, namespace: thumbs}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: thumbs}}
+  template:
+    metadata: {labels: {app: thumbs}}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - {topologyKey: kubernetes.io/hostname, labelSelector: {matchLabels: {app: thumbs}}}
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: thumbs}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          volumeMounts: [{name: cache, mountPath: /cache}]
+      volumes: [{name: cache, persistentVolumeClaim: {claimName: thumbs-cache}}]

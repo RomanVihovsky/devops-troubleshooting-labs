@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: payments-ui, namespace: payments-ui}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: payments-ui}}
+  template:
+    metadata: {labels: {app: payments-ui}}
+    spec:
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: ui
+          image: registry.lab:5000/lab/labapp:1.4-root
+          env: [{name: APP_NAME, value: payments-ui}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

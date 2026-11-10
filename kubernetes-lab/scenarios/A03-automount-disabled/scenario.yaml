@@ -1,0 +1,10 @@
+id: A03
+title: In-cluster API client gets 401 / no token
+kind: incident
+level: 2
+domain: security
+wave: 1
+est: 15m
+reset: ns
+namespaces: [janitor]
+gitops: false

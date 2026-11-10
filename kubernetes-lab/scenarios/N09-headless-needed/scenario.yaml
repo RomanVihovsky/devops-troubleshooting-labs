@@ -1,0 +1,10 @@
+id: N09
+title: The cluster client sees only one peer
+kind: incident
+level: 2
+domain: services
+wave: 1
+est: 15m
+reset: ns
+namespaces: [ring]
+gitops: false

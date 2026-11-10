@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: spool-agent, namespace: agent}
+spec:
+  selector: {matchLabels: {app: spool-agent}}
+  template:
+    metadata: {labels: {app: spool-agent}}
+    spec:
+      containers:
+        - name: agent
+          image: docker.io/library/busybox:1.37
+          command: [sh, -c, 'while true; do date >> /spool/heartbeat; sleep 30; done']
+          volumeMounts: [{name: spool, mountPath: /spool}]
+      volumes:
+        - {name: spool, hostPath: {path: /var/lib/spool-agent, type: Directory}}

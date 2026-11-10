@@ -1,0 +1,10 @@
+id: V08
+title: PVC stuck Terminating
+kind: incident
+level: 1
+domain: storage
+wave: 1
+est: 10m
+reset: ns
+namespaces: [forms]
+gitops: false

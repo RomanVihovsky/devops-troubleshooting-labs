@@ -1,0 +1,10 @@
+id: N14
+title: port-forward works, the Service doesn't
+kind: incident
+level: 2
+domain: services
+wave: 1
+est: 15m
+reset: ns
+namespaces: [ledger-ui]
+gitops: false

@@ -1,0 +1,10 @@
+id: V03
+title: The archive PV can't be reused after the namespace move
+kind: incident
+level: 2
+domain: storage
+wave: 1
+est: 15m
+reset: ns
+namespaces: [archive]
+gitops: false

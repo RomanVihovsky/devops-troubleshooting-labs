@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ring, namespace: ring}
+spec:
+  replicas: 3
+  selector: {matchLabels: {app: ring}}
+  template:
+    metadata: {labels: {app: ring}}
+    spec:
+      containers:
+        - name: member
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: ring}]
+          ports: [{name: gossip, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /ready, port: gossip}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: peers, namespace: ring}
+spec:
+  selector: {app: ring}
+  ports: [{name: gossip, port: 8080, targetPort: gossip}]

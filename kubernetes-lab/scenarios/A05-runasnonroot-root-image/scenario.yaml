@@ -1,0 +1,10 @@
+id: A05
+title: CreateContainerConfigError - image will run as root
+kind: incident
+level: 1
+domain: security
+wave: 1
+est: 10m
+reset: ns
+namespaces: [payments-ui]
+gitops: false

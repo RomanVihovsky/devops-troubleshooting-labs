@@ -1,0 +1,10 @@
+id: N03
+title: Service exists, connections fail - named port mismatch
+kind: incident
+level: 2
+domain: services
+wave: 1
+est: 10m
+reset: ns
+namespaces: [maps]
+gitops: false

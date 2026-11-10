@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: janitor, namespace: janitor}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: janitor}}
+  template:
+    metadata: {labels: {app: janitor}}
+    spec:
+      serviceAccountName: janitor
+      containers:
+        - name: janitor
+          image: docker.io/library/busybox:1.37
+          command: [sh, -c, 'while true; do sleep 30; done']
