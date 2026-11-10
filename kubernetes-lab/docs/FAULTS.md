@@ -36,7 +36,10 @@ timeout (`KX_TIMEOUT`), so a dead API fails a check instead of hanging it.
 
 Add **`gitops: true`** when the scenario commits to `lab/gitops`. The cleanup then force-pushes the tag
 `baseline` to `main`, and Argo CD re-syncs and waits until `lab-apps`, `demo` and `shop` are Synced and
-Healthy. The student also gets `workspace/gitops`.
+Healthy. The student also gets `workspace/gitops`. Applications and AppProjects outside the baseline are
+deleted, apps first. An app whose AppProject is already gone has its finalizer stripped: Argo CD can't
+finalize it, and it would keep `lab-apps` unhealthy (D04). Its resources must sit in the scenario's
+`namespaces:`, which the cleanup deletes next.
 
 Add **`openbao: true`** when setup or the student may change OpenBao (kv paths, policies, auth roles). The
 cleanup then restores the raft snapshot that `./lab cluster golden` saved (`.state/golden/openbao.snap`), in
@@ -67,9 +70,10 @@ escalates to a full `cluster reset` by itself.
 | `tcp_ok_as ns labels\|- host:port` / `check_reach <<'EOF'` | TCP connect from a throwaway agnhost pod that carries `labels` (the NetworkPolicy view); `check_reach` = one check per row `ns labels host:port open\|blocked`, probes in parallel. Don't give a probe labels that a ReplicaSet selects - it would adopt it |
 | `answer key` / `answered key truth [alt..]` | exploration labs: the student's `workspace/<ID>/answers.yaml` vs. the live value (trimmed, case-insensitive) |
 | `cluster_bare_build <version>` | a bare cluster (control plane + workers + Calico) at an older version, cp1's PKI kept (CA + SA key: the desktop kubeconfig stays valid) - for upgrade labs; needs `reset: cluster` |
-| `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready and no restarts for s seconds" |
+| `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready, no restart in the last s seconds (`lastState.terminated.finishedAt`) and none while watching s seconds" |
+| `crashlooping ns selector` | a container waits in CrashLoopBackOff **or** has restarted at least twice after a non-zero exit - for setups that wait for a crash loop |
 | `deploy_ready ns name [n]` / `has_endpoints ns svc` | ready = updated = total replicas (n, default spec.replicas) / the Service has a ready EndpointSlice address |
-| `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view |
+| `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view. Subresources: `can_i anna create pods --subresource=exec` - `pods/exec` would mean a pod *named* exec |
 | `fault_partition node` / `fault_clear node` | cut a node off the cluster network (nft table `lab_fault`), keep the desktop's SSH |
 | `gitops_commit "msg" <<'EOF' ... EOF` | change lab/gitops as a colleague (`dev-bob`), pushed to `main` |
 | `argo_refresh app` / `argo_sync app` / `argo_app_ok app` | Argo CD |
@@ -95,7 +99,27 @@ Gotchas:
   StorageClass annotation (V02), NetworkPolicies in namespaces the scenario doesn't own (X09), static PVs
   and their NFS directories (V03), a Role in `default` (A01).
 - **Selftest output belongs in `.state/`, not `/tmp`.** The desktop's `/tmp` is wiped at boot.
-  `./lab selftest` appends every result line to `.state/selftest.log`.
+  `./lab selftest` appends every result line to `.state/selftest.log`. It keeps a failed setup's log as
+  `.state/selftest-setup-<ID>.log`. A `set -e` setup/solve prints `✘ line N: exit X: <command>` when a command
+  other than `die` stops it.
+- **"Ready" is not "stable".** A pod killed every ~40 s by a bad liveness probe is Ready between kills, and
+  a crash-looping container is `running` or `terminated` most of the time. Poll `crashlooping`, not
+  the waiting reason, and check stability with `stable_for` (which looks back), not with readiness (P04, P09).
+- **busybox >= 1.29 `nslookup <short name>` exits 1** when any search domain answers NXDOMAIN, even though
+  the name resolves. Use FQDNs or dotted names in checks, and `labapp wait-for` in init containers (P12).
+  busybox 1.37 `wget` does https.
+- **The API server pretty-prints JSON for curl/wget user agents**: match `"kind": *"PodList"`, not
+  `"kind":"PodList"` (A03).
+- **Changing a scheduling constraint can deadlock the rollout.** Required pod anti-affinity is symmetric: the
+  old pods repel the new ones, and the old ReplicaSet can't shrink below `replicas - maxUnavailable`. The
+  solve must remove the old ReplicaSet (S04). A `DoNotSchedule` topology spread counts the tainted
+  control plane as an empty domain unless `nodeTaintsPolicy: Honor`.
+- **Don't assume a fault without checking what the node falls back to.** Without `--node-ip` the kubelet
+  resolves its hostname first (`/etc/hosts` maps it to the host-only IP). Only a loopback answer makes it use
+  the default-route NIC (L06). Read the kubelet's fallback order before emulating a "lost flag".
+- **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
+  match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
+  the binary for the string when in doubt.
 
 ## Build your own scenario
 
