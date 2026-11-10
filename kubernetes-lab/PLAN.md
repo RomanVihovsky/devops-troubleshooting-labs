@@ -486,3 +486,72 @@ Settled on 2026-11-08 by the v2 decisions above.
   - an ns-level OpenBao kv restore, needed by the Y scenarios;
   - the CATALOG app names (`labapp`/`envs/dev|prod`/`payments`) vs the live repo (`demo`/`shop`);
   - the PLAN §2 gw description (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
+
+### Phase 5 (2026-11-10): wave 1 - 61 incidents
+
+- **61 incidents** with `wave: 1`, all in the pilot pattern: the reporter's ticket, an outcome verify with
+  "don't cheat" guards, 3 hints, a solution with interview notes. 57 are new, plus the 4 pilots.
+  - 5a research (D01, D03, D04, Y01, Y03, A12, X09) - commit 877ac0d;
+  - 5b control plane + nodes (K02-K04, L02-L06, L11-L14) - commit 3fa401b;
+  - 5c pods + scheduling (P01, P04, P06-P12, S01-S04, S06-S09, S11) - commit b39eb7b;
+  - 5d services, storage, security (N02-N07, N09, N14, V01-V04, V08-V10, A01-A03, A05, A06) - commit 965b4e5.
+  - Moved to wave 2: V05 (local-path volumes are hostPath, so there is no fsGroup to teach), P02 (needs an
+    htpasswd registry), P03 (needs an arm64 image), the second-tier level-2 rows.
+  - The CATALOG D/Y rows now name the live repo (`demo`, `shop`, `envs/<app>`), and each row's verify column
+    says what the verify script checks.
+- **Framework**:
+  - `openbao: true`: `cluster golden` saves an OpenBao raft snapshot; the cleanup restores it in ~7 s (same
+    root token, ESO recovers by itself). T13 moved from `reset: gw` to `ns` + `openbao`. This closes the
+    Phase 4 gap.
+  - every cleanup normalizes the Node objects: uncordon, zone labels, lab taints;
+  - helpers `deploy_ready`, `has_endpoints`; the node reset also undoes kubepods.slice drop-ins and swap;
+  - the GitOps reset deletes extra Applications first, and strips the finalizer of an app whose AppProject is
+    gone. Argo CD can't finalize such an app ("error getting app project"), and lab-apps' prune deletes
+    both at once. D04's cleanup went from 71 s to 12 s, and it no longer escalates to a cluster reset;
+  - a node-level cleanup resets the nodes *before* it waits for the namespaces: pods on a partitioned node
+    can't finish terminating (L11/L12 each lost 120 s);
+  - setup/solve print the failing line of a `set -e` script (ERR trap); selftest keeps a failed setup's log
+    as `.state/selftest-setup-<ID>.log`;
+  - `stable_for` also fails on a restart within its look-back window. A pod killed every ~40 s is Ready
+    between the kills, and the broken pass only watches for 3 s (P09 was NOT BROKEN);
+  - `crashlooping`: CrashLoopBackOff, or at least 2 restarts after a failure. Polling only the waiting reason
+    misses it, because between restarts the state is running or terminated (P04's setup timed out once).
+- **Infra**: a host sleep left the paused VMs 18.6 h behind, and chrony's default `makestep 1 3` only slews.
+  gw and the nodes now use `makestep 1 -1`, in provisioning and in the golden. Ping from the desktop never
+  works (the route goes through VirtualBox NAT): `./lab vm status` is the check.
+- **Fixes on the way**:
+  - D04: Argo CD 3.5 reports a destination denial as "do not match any of the allowed destinations";
+    "not permitted" is the repo/resource-kind check. The T11 hint quoted the old text.
+  - L06: without `--node-ip` the kubelet resolves its hostname first, and `/etc/hosts` maps it to the
+    host-only IP. The fault also needs cloud-init's `127.0.1.1 k8s-w2` (loopback is skipped → the
+    default-route NIC, NAT 10.0.2.15).
+  - P12: busybox >= 1.29 `nslookup <short name>` exits 1 when any search domain answers NXDOMAIN, even
+    though the name resolves, so an `until nslookup` init loop never ends. It now uses `labapp wait-for`.
+  - S04: moving away from required anti-affinity deadlocks the rollout. The old pods' anti-affinity is
+    symmetric and repels the new pods, and the old ReplicaSet can't shrink below `replicas - maxUnavailable`.
+    The fix removes the old ReplicaSet. A `DoNotSchedule` spread also needs `nodeTaintsPolicy: Honor`,
+    otherwise the tainted cp1 counts as an empty domain.
+  - A02: `kubectl auth can-i create pods/exec` reads `<resource>/<name>` and asks about a pod *named* exec
+    (and `get pods/log` said yes for anyone who may get pods). Subresources need `--subresource=exec`.
+  - A03: the API server pretty-prints JSON for curl/wget user agents (`"kind": "PodList"`). busybox 1.37
+    `wget` does https (it ships `ssl_client`).
+- **First batch runs**: 5a 6/7 (D04), 5b 11/12 (L06), 5c 15/18 (P09, P12, S04), 5d 18/20 (A02, A03). Every
+  failure was a scenario or framework bug, fixed and rerun green.
+- **Per-batch timings** (each lab's time includes the cleanup of the lab before it):
+  - most ns-level labs take 15-60 s;
+  - probe/restart labs take 100-280 s (P04, P08, P09, P11, A06: a 60 s stability window);
+  - node labs take 75-300 s (L13 297 s);
+  - K02-K04 take 60-180 s; N06/N07 (cluster reset) take 44-120 s;
+  - Y01 took 514 s once, when D04's leftover forced a cluster reset (fixed).
+- **Gate: deferred** (your call, 2026-11-10). The first wave1 run was stopped after 4/61, all
+  `broken:ok fixed:ok` (A01-A05). Still to run, ≈ 2.5-3 h unattended:
+  ```
+  ./lab selftest wave1          # twice in a row, ≈ 60-75 min each
+  ./lab selftest learn          # ≈ 29 min, T13 now on reset: ns + openbao
+  ./lab cluster doctor
+  ```
+  Then record the result here. Until then every Phase 5 incident has passed its own batch run (failures
+  fixed and rerun), but not two full wave1 runs in a row.
+- **Phase 5: DONE pending the gate.** Next: the gate, then Phase 6, wave 2 (~75: C/R/W/G/X/O, the rest of
+  K/L/D/Y, plus P02/P03/V05 and the deferred level-2 rows). Open gap carried over: the PLAN §2 gw description
+  (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
