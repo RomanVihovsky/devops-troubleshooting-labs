@@ -487,7 +487,7 @@ Settled on 2026-11-08 by the v2 decisions above.
   - the CATALOG app names (`labapp`/`envs/dev|prod`/`payments`) vs the live repo (`demo`/`shop`);
   - the PLAN §2 gw description (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
 
-### Phase 5 (2026-11-10): wave 1 - 61 incidents
+### Phase 5 (2026-11-10/11): wave 1 - 61 incidents
 
 - **61 incidents** with `wave: 1`, all in the pilot pattern: the reporter's ticket, an outcome verify with
   "don't cheat" guards, 3 hints, a solution with interview notes. 57 are new, plus the 4 pilots.
@@ -543,15 +543,18 @@ Settled on 2026-11-08 by the v2 decisions above.
   - node labs take 75-300 s (L13 297 s);
   - K02-K04 take 60-180 s; N06/N07 (cluster reset) take 44-120 s;
   - Y01 took 514 s once, when D04's leftover forced a cluster reset (fixed).
-- **Gate: deferred** (your call, 2026-11-10). The first wave1 run was stopped after 4/61, all
-  `broken:ok fixed:ok` (A01-A05). Still to run, ≈ 2.5-3 h unattended:
-  ```
-  ./lab selftest wave1          # twice in a row, ≈ 60-75 min each
-  ./lab selftest learn          # ≈ 29 min, T13 now on reset: ns + openbao
-  ./lab cluster doctor
-  ```
-  Then record the result here. Until then every Phase 5 incident has passed its own batch run (failures
-  fixed and rerun), but not two full wave1 runs in a row.
-- **Phase 5: DONE pending the gate.** Next: the gate, then Phase 6, wave 2 (~75: C/R/W/G/X/O, the rest of
-  K/L/D/Y, plus P02/P03/V05 and the deferred level-2 rows). Open gap carried over: the PLAN §2 gw description
+- **Gate: PASSED (2026-11-11)**, after a cold start of all VMs, which doctor passed at once:
+  - `./lab selftest wave1` passed twice in a row: 09:44-10:56 and 10:56-12:09 UTC, 61/61 `broken:ok fixed:ok`
+    both times, with no fixes in between;
+  - then `./lab selftest learn` 16/16 (12:09-12:38; T13 on `reset: ns` + `openbao`, 123 s);
+  - then `./lab cluster doctor` PASS.
+  - (A first attempt on 2026-11-10 was stopped after 4/61, all green, and deferred to the next day.)
+- **Timings** (gate runs; each lab's time includes the cleanup of the lab before it):
+  - **a wave1 run takes ≈ 72 min**: 35-36 labs ≤ 60 s, 13-16 take 61-120 s, 10-12 take > 120 s;
+  - the slowest: L01 222-233 s, P11 165-192 s, K04 169-181 s, L13 110-172 s, L11 166-170 s, K02 164-169 s,
+    L04 143-165 s, X09 154-155 s, S09 149-152 s, L02 149-151 s;
+  - D04 now takes 110 s, and Y01 34 s (it took 514 s when D04's leftover forced a cluster reset);
+  - a learn run takes ≈ 28-29 min, unchanged from Phase 4.
+- **Phase 5: DONE (2026-11-11).** Next: Phase 6, wave 2 (~75: C/R/W/G/X/O, the rest of K/L/D/Y, plus
+  P02/P03/V05 and the deferred level-2 rows). Open gap carried over: the PLAN §2 gw description
   (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
