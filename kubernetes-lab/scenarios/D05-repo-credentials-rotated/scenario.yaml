@@ -1,0 +1,11 @@
+id: D05
+title: Every Argo CD app Unknown - "authentication required" after a password rotation
+kind: incident
+level: 1
+domain: delivery
+wave: 2
+est: 10m
+reset: ns
+namespaces: []
+gitops: true
+openbao: true

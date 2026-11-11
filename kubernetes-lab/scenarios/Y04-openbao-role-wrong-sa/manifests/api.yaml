@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: api, namespace: prod}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: api}}
+  template:
+    metadata: {labels: {app: api}}
+    spec:
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - name: AUTH_TOKEN
+              valueFrom: {secretKeyRef: {name: app-secrets, key: api_key}}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 5}

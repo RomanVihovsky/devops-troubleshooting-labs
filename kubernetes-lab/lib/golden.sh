@@ -186,7 +186,15 @@ reset_gitops_baseline() {
   for a in $(kx -n argocd get appprojects.argoproj.io -o name 2>/dev/null); do
     case ${a##*/} in lab|default) ;; *) kx -n argocd delete "$a" --wait=false >/dev/null 2>&1 ;; esac
   done
-  for a in lab-apps demo shop; do retry 180 argo_app_ok "$a" || warn "argo app $a not Synced/Healthy after the GitOps reset"; done
+  retry 180 root_converged || warn "argo app lab-apps not Synced/Healthy after the GitOps reset"
+  for a in demo shop; do retry 180 argo_app_ok "$a" || warn "argo app $a not Synced/Healthy after the GitOps reset"; done
+}
+# root_converged: lab-apps Synced + Healthy - its prune can race the deletion of extra apps ("applications ... not
+# found", D08) and auto-sync never retries a failed revision, so a failed root sync is started again
+root_converged() {
+  argo_app_ok lab-apps && return 0
+  [ "$(kx -n argocd get application lab-apps -o jsonpath='{.status.operationState.phase}' 2>/dev/null)" = Running ] || argo_sync lab-apps
+  return 1
 }
 
 # enable too: a scenario may have disabled kubelet, which would bite at the next reboot

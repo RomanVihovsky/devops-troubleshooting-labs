@@ -63,7 +63,15 @@ lab_err_trap() { echo "✘ line $2: exit $1: ${BASH_COMMAND:0:160}" >&2; }
 
 # --------------------------------------------------------------- helpers ----
 # kns <ns>...: namespaces owned by the running scenario (deleted by its cleanup)
-kns() { local n; for n in "$@"; do kx create namespace "$n" --dry-run=client -o yaml | ka -f -; done; }
+# (a namespace of the previous run still Terminating is waited for first - creating "into" it fails later)
+ns_gone_or_live() { [ -z "$(kx get namespace "$1" -o jsonpath='{.metadata.deletionTimestamp}' 2>/dev/null)" ]; }
+kns() {
+  local n
+  for n in "$@"; do
+    retry 240 ns_gone_or_live "$n" || warn "namespace $n is still terminating"
+    kx create namespace "$n" --dry-run=client -o yaml | ka -f -
+  done
+}
 # ka -f <file|->: kubectl apply with the scenario label on every object (pod templates untouched).
 # (Not "kubectl label --local -o yaml": for a multi-document file it prints the objects without "---".)
 ka() {
@@ -114,12 +122,13 @@ stable_for() {
   r0=$(restarts "$ns" "$sel"); sleep "$t"
   [ "$(restarts "$ns" "$sel")" = "$r0" ] && kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=5s >/dev/null 2>&1
 }
-# http_code <ns> <url> [header]: HTTP status seen from inside the cluster (a throwaway busybox pod in <ns>)
+# http_code <ns> <url> [header]: HTTP status seen from inside the cluster (a throwaway busybox pod in <ns>). Only
+# the status header line counts: on 4xx/5xx busybox wget adds "wget: server returned error: HTTP/1.1 ..."
 http_code() {
   local ns=$1 url=$2 hdr=${3:-} pod="lab-probe-$RANDOM" out
   out=$(kx -n "$ns" run "$pod" --rm -i --restart=Never --quiet --image="$BUSYBOX_IMAGE" \
         --labels="$LAB_LABEL=${LAB_ID:-probe}" --command -- \
-        sh -c "wget -S -q -O /dev/null -T 5 ${hdr:+--header '$hdr'} '$url' 2>&1 | awk '/HTTP\\//{c=\$2} END{print c+0}'" 2>/dev/null)
+        sh -c "wget -S -q -O /dev/null -T 5 ${hdr:+--header '$hdr'} '$url' 2>&1 | awk '/^ *HTTP\\//{c=\$2} END{print c+0}'" 2>/dev/null)
   echo "${out:-0}" | tail -1
 }
 http_ok() { [ "$(http_code "$@")" = 200 ]; }
@@ -164,6 +173,14 @@ answered() {
     [ -n "$t" ] && [ "$a" = "${t,,}" ] && return 0
   done
   return 1
+}
+# pods_get <ns> <selector> <path> [port]: what every Running pod of <selector> answers on localhost:<port><path>
+# (`labapp get` inside the pod - labapp images only), one body per line
+pods_get() {
+  local p
+  for p in $(kx -n "$1" get pods -l "$2" --field-selector=status.phase=Running -o name 2>/dev/null); do
+    kx -n "$1" exec "$p" -- labapp get "http://localhost:${4:-8080}$3" 2>/dev/null; echo
+  done
 }
 # http_out <url> [Host]: HTTP status from this desktop (LB 192.168.56.200, NodePorts)
 http_out() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 ${2:+-H "Host: $2"} "$1"; }

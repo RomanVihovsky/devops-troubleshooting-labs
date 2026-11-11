@@ -1,0 +1,31 @@
+# notify's SecretStore (OpenBao role notify) and the token, refreshed every 15 s
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: eso, namespace: notify}
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata: {name: openbao, namespace: notify}
+spec:
+  provider:
+    vault:
+      server: https://bao.lab:8200
+      path: secret
+      version: v2
+      caProvider: {type: ConfigMap, name: lab-ca, key: ca.crt}
+      auth:
+        kubernetes:
+          mountPath: kubernetes
+          role: notify
+          serviceAccountRef: {name: eso, audiences: [openbao]}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata: {name: api-token, namespace: notify}
+spec:
+  refreshInterval: 15s
+  secretStoreRef: {kind: SecretStore, name: openbao}
+  target: {name: api-token}
+  data:
+    - secretKey: token
+      remoteRef: {key: notify/api, property: token}

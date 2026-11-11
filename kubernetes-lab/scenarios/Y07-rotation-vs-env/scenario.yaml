@@ -1,0 +1,10 @@
+id: Y07
+title: Rotated the API token in OpenBao an hour ago - notifier still sends the old one
+kind: incident
+level: 2
+domain: secrets
+wave: 2
+est: 20m
+reset: ns
+namespaces: [notify]
+openbao: true

@@ -1,0 +1,10 @@
+id: D07
+title: Every sync fails after a chart refactor - "spec.selector ... field is immutable"
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 20m
+reset: ns
+namespaces: []
+gitops: true

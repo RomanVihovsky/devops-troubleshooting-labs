@@ -1,0 +1,10 @@
+id: Y10
+title: Security scan - plaintext password in Git in a ".enc.yaml" file
+kind: incident
+level: 2
+domain: secrets
+wave: 2
+est: 20m
+reset: ns
+namespaces: [newsvc]
+gitops: true

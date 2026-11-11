@@ -1,0 +1,10 @@
+id: D10
+title: Prod runs with dev settings - 1 replica, debug logs
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 15m
+reset: ns
+namespaces: [web-prod, web-dev]
+gitops: true

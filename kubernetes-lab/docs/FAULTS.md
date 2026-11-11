@@ -68,7 +68,7 @@ escalates to a full `cluster reset` by itself.
 
 | Helper | What |
 |---|---|
-| `kns ns..` / `ka -f file|-` | create namespaces / apply objects - always labelled for cleanup |
+| `kns ns..` / `ka -f file|-` | create namespaces / apply objects - always labelled for cleanup. `kns` first waits (up to 4 min) for a namespace of the previous run that is still Terminating |
 | `kx ...` | kubectl against the lab cluster |
 | `nx <node> '<cmd>'` / `nxi <node>` | root on a node (command / script on stdin) |
 | `wait_rollout ns kind/name [s]` | rollout status with a timeout |
@@ -87,6 +87,7 @@ escalates to a full `cluster reset` by itself.
 | `gx /api/path` / `bx <bao args>` | Gitea API (user lab) / OpenBao CLI (root) |
 | `check desc cmd..` / `check_eventually s desc cmd..` / `verdict` | verify building blocks |
 | `remember k v` / `recall k` | facts from setup to verify (kept in `.state`) |
+| `pods_get ns selector path [port]` | what every Running pod answers on `localhost:<port><path>` (`labapp get` inside the pod), one body per line - per-replica config checks |
 | `https_out host [path]` | HTTPS status from the desktop through the LB (443), the cert verified against the lab CA for `host`; `000` = TLS failed (Traefik's default cert, wrong name) |
 | `load_test ns url [-c N -d S --rps N]` | `labapp load` from a throwaway pod: JSON `{requests, errors, codes, rps, p50_ms, p90_ms, p99_ms}` (`{}` if the pod failed). Runs without the 10 s API timeout of verify |
 | `node_reboot node [s]` | reboot from inside the guest, wait for a new boot id over SSH. Not for Ready: the caller decides what "back" means |
@@ -131,6 +132,22 @@ Gotchas:
 - **Don't assume a fault without checking what the node falls back to.** Without `--node-ip` the kubelet
   resolves its hostname first (`/etc/hosts` maps it to the host-only IP). Only a loopback answer makes it use
   the default-route NIC (L06). Read the kubelet's fallback order before emulating a "lost flag".
+- **busybox `wget -S` adds a last line on errors**: `wget: server returned error: HTTP/1.1 502 ...`. `http_code`
+  reads only the status header line (`^ *HTTP/`); before Phase 6 it returned 0 for every 4xx/5xx.
+- **No `yq` in lab scripts.** The desktop's `yq` is a snap that doesn't run here. Use python3 + PyYAML (as `ka`
+  does) or jq on `-o json`.
+- **GitOps reset races**: `lab-apps`' prune can fail on an Application the reset is deleting ("... not found"),
+  and auto-sync never retries a failed revision. The reset re-syncs the root until it converges
+  (`root_converged`). Without that the next start saw an unhealthy cluster and did a full reset (D08).
+- **Hooks and their dependencies**: Argo CD runs PreSync hooks before any Sync-phase object exists, and that
+  includes the chart's own ServiceAccount (D09: the Job couldn't even create its pod). Hook resources carry
+  `argocd.argoproj.io/hook-finalizer`: when the app is deleted, strip it, or the namespace hangs in Terminating.
+- **Traefik vs ingress-nginx error codes**: a wrong backend Service port → Traefik skips the route (404 + "service
+  port not found" in its log); no ready endpoints → 503 (`allowEmptyServices`). Traefik serves several Gateways
+  on one entrypoint (G05 has its own Gateway on `web:8000`).
+- **Probe pods and ReplicaSets**: a policy probe must not carry the labels a ReplicaSet selects (it would be
+  adopted). Select with a label the RS doesn't use (X10 uses `app.kubernetes.io/component`), or give the
+  workload an extra selector label (X02's `tier: x02`).
 - **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
   match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
   the binary for the string when in doubt.

@@ -1,0 +1,10 @@
+id: D09
+title: Sync stuck "waiting for completion of hook batch/Job/billing-migrate"
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 20m
+reset: ns
+namespaces: [billing]
+gitops: true
