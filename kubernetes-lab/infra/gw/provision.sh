@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # provision.sh - runs ON k8s-gw as root (./lab vm provision gw). Idempotent.
 # k8s-gw is the lab's "ops box": distro packages + static binaries under systemd, no container runtime.
-#   :5000 registry (distribution)   :8080 nginx artifact server (apt repo + files)   :6443 haproxy -> cp1
+#   :5000 registry (distribution)   :5001 the same images, read-only, htpasswd (the "private registry")
+#   :8080 nginx artifact server (apt repo + files)   :6443 haproxy -> cp1
 #   NTP server (chrony)             NFS /srv/nfs
 set -euo pipefail
 SRC=/srv/k8slab/src
@@ -14,7 +15,7 @@ say() { echo "==> $*"; }
 say "packages"
 for _ in 1 2 3; do if apt-get update -qq; then break; fi; sleep 5; done
 apt-get install -y -qq --no-install-recommends nginx haproxy chrony nfs-kernel-server dpkg-dev gnupg curl jq \
-  ca-certificates >/dev/null
+  ca-certificates apache2-utils >/dev/null
 install -d /srv/k8slab/files /srv/k8slab/apt /srv/k8slab/registry /srv/k8slab/work /etc/k8slab
 
 bash "$SRC/infra/gw/sync.sh" files
@@ -37,6 +38,17 @@ install -m 644 "$SRC/infra/gw/k8slab-registry.service" /etc/systemd/system/k8sla
 systemctl daemon-reload
 systemctl enable --now k8slab-registry >/dev/null 2>&1
 systemctl restart k8slab-registry
+
+say "registry :5001 (read-only, htpasswd user ci)"
+install -m 644 "$SRC/infra/gw/registry-auth.yml" /etc/k8slab/registry-auth.yml
+[ -s /etc/k8slab/registry-ci.password ] || openssl rand -hex 12 > /etc/k8slab/registry-ci.password
+chmod 600 /etc/k8slab/registry-ci.password
+htpasswd -Bbc /etc/k8slab/registry-auth.htpasswd ci "$(cat /etc/k8slab/registry-ci.password)" 2>/dev/null
+chown root:k8slab-registry /etc/k8slab/registry-auth.htpasswd; chmod 640 /etc/k8slab/registry-auth.htpasswd
+install -m 644 "$SRC/infra/gw/k8slab-registry-auth.service" /etc/systemd/system/k8slab-registry-auth.service
+systemctl daemon-reload
+systemctl enable --now k8slab-registry-auth >/dev/null 2>&1
+systemctl restart k8slab-registry-auth
 
 say "nginx :8080 (artifact server)"
 install -m 644 "$SRC/infra/gw/nginx-k8slab.conf" /etc/nginx/sites-available/k8slab

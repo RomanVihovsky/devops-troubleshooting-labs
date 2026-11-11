@@ -93,6 +93,8 @@ line() { [ -n "$3" ] || { echo "no checksum for $1" >&2; exit 1; }; printf '%s %
   line "${u##*/}" "$u" "$(sum_from "${u%/*}/sops-v$SOPS_VERSION.checksums.txt" "${u##*/}")"
   u=$GH/FiloSottile/age/releases/download/v$AGE_VERSION/age-v$AGE_VERSION-linux-amd64.tar.gz
   line "${u##*/}" "$u" "$(hash_url "$u")"
+  u=$GH/stern/stern/releases/download/v$STERN_VERSION/stern_${STERN_VERSION}_linux_amd64.tar.gz
+  line "${u##*/}" "$u" "$(sum_from "${u%/*}/checksums.txt" "${u##*/}")"
   u=$(chart_url https://argoproj.github.io/argo-helm/index.yaml argo-cd "$ARGOCD_CHART_VERSION")
   line "argo-cd-$ARGOCD_CHART_VERSION.tgz" "$u" "$(hash_url "$u")"
   u=$(chart_url https://bitnami.github.io/sealed-secrets/index.yaml sealed-secrets "$SEALED_SECRETS_CHART_VERSION")

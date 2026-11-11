@@ -24,6 +24,7 @@ openbao_2.7.2_linux_amd64.deb https://github.com/openbao/openbao/releases/downlo
 gitea-28.2.0-linux-amd64 https://github.com/go-gitea/gitea/releases/download/v28.2.0/gitea-28.2.0-linux-amd64 15681fc615d56611c274f52803fef4d6d5316b620f93b677dd4b831a74e50b9f
 sops-v3.13.3.linux.amd64 https://github.com/getsops/sops/releases/download/v3.13.3/sops-v3.13.3.linux.amd64 e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
 age-v1.3.2-linux-amd64.tar.gz https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz cbe24006683f8eb669266162894b9a522a1af52f2665fbc63a4bb032ed26ac10
+stern_1.35.0_linux_amd64.tar.gz https://github.com/stern/stern/releases/download/v1.35.0/stern_1.35.0_linux_amd64.tar.gz 03729b01a8fcfab25f6ea53389bd38bc37400ff86d90cd2dcda541f248cf843e
 argo-cd-10.11.6.tgz https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.11.6/argo-cd-10.11.6.tgz d8f096d87513b41ff754053a7f9604c943bf29c15436a79226fd51595ea67d05
 sealed-secrets-2.22.0.tgz https://github.com/bitnami/sealed-secrets/releases/download/helm-v2.22.0/sealed-secrets-2.22.0.tgz 1ed23bb224652aa6c8477979d4bddccd207205b27b12b120f62f360890c80606
 external-secrets-2.14.0.tgz https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.14.0/external-secrets-2.14.0.tgz 0a6d9e91b1ff50adfdbf24b50b582babfa7c5b7df42b21974ca4b3fb88ee5e34

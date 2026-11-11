@@ -70,7 +70,9 @@ rm -f /var/tmp/k8slab-golden.tgz
 modprobe overlay; modprobe br_netfilter
 sysctl -q --system
 systemctl daemon-reload
-systemctl restart chrony; chronyc -a makestep >/dev/null 2>&1
+# enable too (L16 disables it); step at once and wait (bounded) for the sync - a clock days off breaks TLS
+systemctl enable chrony >/dev/null 2>&1; systemctl restart chrony; chronyc -a makestep >/dev/null 2>&1
+timeout 30 chronyc waitsync 25 1 0 1 >/dev/null 2>&1
 # packages (a scenario may have up/downgraded them)
 want=\$(tr '\n' ' ' < /var/tmp/k8slab-golden.packages)
 have=\$(dpkg-query -W -f '\${Package}=\${Version} ' kubeadm kubelet kubectl cri-tools kubernetes-cni 2>/dev/null)
@@ -107,7 +109,7 @@ reset_gw() {
   push_file k8s-gw /var/tmp/k8slab-golden.tgz < "$GOLDEN_DIR/k8s-gw.tgz"
   nx k8s-gw "systemctl stop $GW_STATEFUL 2>/dev/null; rm -rf /var/lib/openbao/data /var/lib/gitea/data
     tar -xzf /var/tmp/k8slab-golden.tgz -C / && rm -f /var/tmp/k8slab-golden.tgz
-    exportfs -ra; systemctl restart haproxy chrony nginx k8slab-registry nfs-server
+    exportfs -ra; systemctl restart haproxy chrony nginx k8slab-registry k8slab-registry-auth nfs-server
     systemctl start $GW_STATEFUL 2>/dev/null; true" </dev/null
 }
 
@@ -115,11 +117,32 @@ reset_gw() {
 # restart; the static seal and the root token are unchanged
 reset_openbao() {
   [ -s "$GOLDEN_DIR/openbao.snap" ] || { warn "no OpenBao snapshot in the golden - ./lab cluster golden"; return 1; }
+  # a scenario may have broken OpenBao itself (Y06: the seal key) - its config from the golden first
+  if ! bao_unsealed; then
+    openbao_config_restore
+    retry 90 bao_unsealed || { warn "OpenBao still sealed or down after restoring /etc/openbao"; return 1; }
+  fi
   bx operator raft snapshot restore "$GOLDEN_DIR/openbao.snap" >/dev/null 2>&1 \
     || bx operator raft snapshot restore -force "$GOLDEN_DIR/openbao.snap" >/dev/null 2>&1 \
     || { warn "OpenBao snapshot restore failed"; return 1; }
   retry 60 bao_unsealed || { warn "OpenBao sealed after the restore"; return 1; }
   retry 30 bx kv get -mount=secret shop || warn "OpenBao kv not readable after the restore"
+}
+
+# openbao_config_restore: /etc/openbao (config, TLS, seal key) back from the gw golden, then a restart
+openbao_config_restore() {
+  push_file k8s-gw /var/tmp/k8slab-golden.tgz < "$GOLDEN_DIR/k8s-gw.tgz"
+  nx k8s-gw 'rm -rf /etc/openbao && tar -xzf /var/tmp/k8slab-golden.tgz -C / etc/openbao; rm -f /var/tmp/k8slab-golden.tgz
+    systemctl reset-failed openbao 2>/dev/null; systemctl restart openbao' </dev/null
+}
+
+# root_app_reset: lab-apps is bootstrapped by hand (not in Git) - its spec back to bootstrap/root.yaml (D11)
+root_app_reset() {
+  local f="$LAB_DIR/infra/gitops/bootstrap/root.yaml" want
+  want=$(kx apply -f "$f" --dry-run=client -o json | jq -cS .spec)
+  [ "$(kx -n argocd get application lab-apps -o json 2>/dev/null | jq -cS .spec)" = "$want" ] && return 0
+  kx -n argocd patch application lab-apps --type json -p "[{\"op\":\"replace\",\"path\":\"/spec\",\"value\":$want}]" >/dev/null 2>&1 \
+    || kx apply -f "$f" >/dev/null
 }
 
 extra_apps() { kx -n argocd get applications.argoproj.io -o name 2>/dev/null | grep -vE '/(lab-apps|demo|shop)$'; }
@@ -146,6 +169,9 @@ reset_gitops_baseline() {
     rm -rf "$w"; warn "gitops: main not reset"; return 1
   fi
   rm -rf "$w"
+  # Argo CD's repo credentials (D05 rotates them) and the hand-bootstrapped root app (D11)
+  argo_repo_secret || warn "gitops: repo-gitops not restored"
+  root_app_reset || warn "gitops: lab-apps spec not restored"
   argo_refresh lab-apps; argo_sync lab-apps
   for a in demo shop; do argo_refresh "$a"; done
   # Applications / AppProjects that are not part of the baseline (created with kubectl, or left behind).

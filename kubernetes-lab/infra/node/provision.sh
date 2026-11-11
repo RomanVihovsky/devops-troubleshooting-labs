@@ -60,6 +60,15 @@ server = "http://registry.lab:5000"
 [host."http://registry.lab:5000"]
   capabilities = ["pull", "resolve"]
 EOF
+# the "private registry" (same images, htpasswd): credentials come from the pod's imagePullSecrets (P02)
+mkdir -p /etc/containerd/certs.d/registry.lab:5001
+cat > /etc/containerd/certs.d/registry.lab:5001/hosts.toml <<'EOF'
+# the lab's private registry on k8s-gw: plain HTTP, basic auth from imagePullSecrets
+server = "http://registry.lab:5001"
+
+[host."http://registry.lab:5001"]
+  capabilities = ["pull", "resolve"]
+EOF
 systemctl daemon-reload
 systemctl enable containerd >/dev/null 2>&1
 systemctl restart containerd

@@ -1,0 +1,20 @@
+# the lab's "private registry" on k8s-gw, :5001: the SAME storage as :5000, read-only, behind htpasswd
+# (user ci, password in /etc/k8slab/registry-ci.password). Pulls need an imagePullSecret (P02).
+# Nodes reach it through /etc/containerd/certs.d/registry.lab:5001/hosts.toml (plain HTTP).
+version: 0.1
+log:
+  level: info
+storage:
+  filesystem:
+    rootdirectory: /srv/k8slab/registry
+  maintenance:
+    readonly:
+      enabled: true
+    uploadpurging:
+      enabled: false
+auth:
+  htpasswd:
+    realm: k8slab-private
+    path: /etc/k8slab/registry-auth.htpasswd
+http:
+  addr: :5001

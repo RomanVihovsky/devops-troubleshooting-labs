@@ -168,6 +168,59 @@ answered() {
 # http_out <url> [Host]: HTTP status from this desktop (LB 192.168.56.200, NodePorts)
 http_out() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 ${2:+-H "Host: $2"} "$1"; }
 can_i() { local as=$1; shift; [ "$(kx auth can-i --as "$as" "$@" 2>/dev/null)" = yes ]; }
+# https_out <host> [path]: HTTPS status from this desktop through the LB (192.168.56.200:443), the served cert
+# verified against the lab CA for <host> - 000 = TLS failed (Traefik's default cert, wrong name, other CA)
+https_out() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 --cacert "$CA_DIR/ca.crt" --resolve "$1:443:192.168.56.200" "https://$1${2:-/}"; }
+LABAPP_IMAGE=registry.lab:5000/lab/labapp:1.4
+# load_test <ns> <url> [-c N] [-d S] [--rps N]: `labapp load` from a throwaway pod in <ns> (no API timeout: the
+# attach lasts the whole run). Prints the JSON summary {requests, errors, codes, rps, p50_ms, p90_ms, p99_ms,
+# max_ms}, or {} when the pod could not run. Read it with jq, e.g. jq .p99_ms
+load_test() {
+  local ns=$1 url=$2 out; shift 2
+  out=$(KX_TIMEOUT='' kx -n "$ns" run "lab-load-$RANDOM$RANDOM" --rm -i --restart=Never --quiet --image="$LABAPP_IMAGE" \
+        --labels="$LAB_LABEL=${LAB_ID:-probe},lab.k8slab/role=load" --command -- labapp load "$url" -q "$@" 2>/dev/null | grep '^{' | tail -1)
+  echo "${out:-"{}"}"
+}
+# node_reboot <node> [timeout]: reboot from inside the guest, wait until SSH answers with a new boot id. Not for
+# Ready: a reboot-surfacing fault may keep the node NotReady (L14) - the caller decides what "back" means.
+boot_id() { nx "$1" 'cat /proc/sys/kernel/random/boot_id' </dev/null 2>/dev/null; }
+node_rebooted() { local b; b=$(boot_id "$1") && [ -n "$b" ] && [ "$b" != "$2" ]; }
+node_reboot() {
+  local n b; n=$(node_name "$1"); b=$(boot_id "$n")
+  nx "$n" 'systemctl reboot' </dev/null >/dev/null 2>&1 || true
+  sleep 10
+  retry "${2:-300}" node_rebooted "$n" "$b"
+}
+# user_kubeconfig <user> <group[,group..]> <file>: a client cert for <user> from the cluster CA through the CSR
+# API (CSR lab-<user>, labelled for cleanup) and a kubeconfig at <file> that uses it - a real teammate (K08, A08)
+csr_issued() { [ -n "$(kx get csr "$1" -o jsonpath='{.status.certificate}' 2>/dev/null)" ]; }
+user_kubeconfig() {
+  local u=$1 f=$3 d g subj="/CN=$1" server; d=$(mktemp -d)
+  for g in ${2//,/ }; do subj+="/O=$g"; done
+  openssl genrsa -out "$d/key" 2048 2>/dev/null
+  openssl req -new -key "$d/key" -subj "$subj" -out "$d/csr"
+  kx delete csr "lab-$u" --ignore-not-found >/dev/null 2>&1
+  ka -f - <<EOF
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata: {name: lab-$u}
+spec:
+  request: $(base64 -w0 "$d/csr")
+  signerName: kubernetes.io/kube-apiserver-client
+  expirationSeconds: 2592000
+  usages: [client auth]
+EOF
+  kx certificate approve "lab-$u" >/dev/null && retry 30 csr_issued "lab-$u" || { rm -rf "$d"; return 1; }
+  kx get csr "lab-$u" -o jsonpath='{.status.certificate}' | base64 -d > "$d/crt"
+  kx config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > "$d/ca"
+  server=$(kx config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+  rm -f "$f"
+  KUBECONFIG=$f kubectl config set-cluster lab --server="$server" --certificate-authority="$d/ca" --embed-certs >/dev/null
+  KUBECONFIG=$f kubectl config set-credentials "$u" --client-certificate="$d/crt" --client-key="$d/key" --embed-certs >/dev/null
+  KUBECONFIG=$f kubectl config set-context "$u@lab" --cluster=lab --user="$u" --namespace=default >/dev/null
+  KUBECONFIG=$f kubectl config use-context "$u@lab" >/dev/null
+  chmod 600 "$f"; rm -rf "$d"
+}
 # fault_partition <node> / fault_clear <node>: cut a node off the cluster network, keep the desktop's SSH
 # (it arrives from 192.168.56.1 through the host). Egress matched in POSTROUTING (see docs/FAULTS.md).
 fault_partition() {
@@ -242,6 +295,8 @@ scenario_cleanup() {
     nodes=$(ylist nodes "$d")
     for n in $nodes; do n=$(node_name "$n"); reset_node_files "$n" </dev/null; start_kubelets "$n"; done
     retry 180 nodes_ready || warn "not all nodes Ready after the node reset"
+    # evictions (R04, R08) leave Failed pods in any namespace - cluster_quick would count them as broken
+    kx delete pods -A --field-selector=status.phase=Failed --wait=false >/dev/null 2>&1
   fi
   if [ -n "$ns" ]; then
     # shellcheck disable=SC2086

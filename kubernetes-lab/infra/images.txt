@@ -36,6 +36,8 @@ lab registry.k8s.io/e2e-test-images/agnhost:2.66.0
 lab docker.io/library/busybox:1.37
 lab-own registry.lab:5000/lab/redis:7-alpine
 lab-own registry.lab:5000/lab/postgres:16-alpine
+lab-own registry.lab:5000/lab/nginx:1.30-alpine
+lab-own registry.lab:5000/lab/labapp:1.6
 lab-own registry.lab:5000/lab/labapp:1.4
 lab-own registry.lab:5000/lab/labapp:1.3
 lab-own registry.lab:5000/lab/labapp:1.5

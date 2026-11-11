@@ -122,10 +122,12 @@ crane_copy() {   # src dst [flags]: quiet unless it fails (crane logs every blob
 sync_images() {
   local g img dst n=0 c=0
   gen_images
-  for m in $LAB_IMAGES; do   # lab-owned copies: registry.lab:5000/<lab path> <- pinned upstream ref
-    dst="$REG/${m%%=*}"
+  local ref plat
+  for m in $LAB_IMAGES; do   # lab-owned copies: registry.lab:5000/<lab path> <- pinned upstream ref[%platform]
+    dst="$REG/${m%%=*}"; ref=${m#*=}; plat=linux/amd64
+    if [[ $ref == *%* ]]; then plat=${ref#*%}; ref=${ref%%%*}; fi
     crane digest --insecure "$dst" >/dev/null 2>&1 && continue
-    say "image ${m#*=} -> $dst"; crane_copy "${m#*=}" "$dst" --platform linux/amd64
+    say "image $ref ($plat) -> $dst"; crane_copy "$ref" "$dst" --platform "$plat"
   done
   while read -r g img; do
     case $g in ''|\#*|lab-own) continue ;; esac

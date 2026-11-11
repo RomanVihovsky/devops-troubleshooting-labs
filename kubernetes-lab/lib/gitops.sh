@@ -39,6 +39,9 @@ gitops_tools() {
     install -m 755 "$(find "$t" -type f -name bao | head -1)" "$BIN_DIR/bao"
     rm -rf "$t"
   fi
+  if ! "$BIN_DIR/stern" --version 2>/dev/null | grep -q "$STERN_VERSION"; then
+    tar -xzf "$(gw_file "stern_${STERN_VERSION}_linux_amd64.tar.gz")" -C "$BIN_DIR" stern
+  fi
   [ -s "$STATE_DIR/age.key" ] || "$BIN_DIR/age-keygen" -o "$STATE_DIR/age.key" 2>/dev/null
 }
 
@@ -72,6 +75,37 @@ bao_unsealed() { [ "$(bao_api sys/seal-status 2>/dev/null | jq -r .sealed)" = fa
 gx() { curl -fsS --max-time 10 -H "Authorization: token $(cat "$GITEA_DIR/token" 2>/dev/null)" -H 'Content-Type: application/json' \
          "$GITEA_URL/api/v1$1" "${@:2}"; }
 rand() { openssl rand -hex 16; }
+# registry_ci_password: the password of user ci on the private registry registry.lab:5001 (made by gw's provision)
+registry_ci_password() { nx k8s-gw 'cat /etc/k8slab/registry-ci.password' </dev/null; }
+private_registry_ok() {
+  [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://192.168.56.20:5001/v2/)" = 401 ] \
+    && curl -fs --max-time 5 -u "ci:$(registry_ci_password)" http://192.168.56.20:5001/v2/lab/labapp/tags/list | grep -q '"1.4"'
+}
+# gitea_argocd_user: Argo CD's own read-only Gitea account (password in .state/gitea/argocd-password), created
+# or its password put back (D05 rotates it)
+gitea_argocd_user() {
+  local pw
+  [ -s "$GITEA_DIR/argocd-password" ] || { rand > "$GITEA_DIR/argocd-password"; chmod 600 "$GITEA_DIR/argocd-password"; }
+  pw=$(cat "$GITEA_DIR/argocd-password")
+  nx k8s-gw "g() { runuser -u git -- gitea --config /etc/gitea/app.ini \"\$@\"; }
+    if g admin user list | awk 'NR > 1 { print \$2 }' | grep -qx argocd; then
+      g admin user change-password --username argocd --password '$pw' --must-change-password=false >/dev/null
+    else
+      g admin user create --username argocd --password '$pw' --email argocd@k8s.lab --must-change-password=false >/dev/null
+    fi" </dev/null || return 1
+  gx /repos/lab/gitops/collaborators/argocd -X PUT -d '{"permission":"read"}' >/dev/null
+}
+# argo_repo_secret: Argo CD's credentials for lab/gitops (Gitea user argocd, read-only) - also the GitOps reset
+argo_repo_secret() {
+  kx -n argocd create secret generic repo-gitops --from-literal=type=git --from-literal=url="$GITOPS_REPO" \
+    --from-literal=username=argocd --from-literal=password="$(cat "$GITEA_DIR/argocd-password")" --dry-run=client -o yaml \
+    | kx label --local -f - argocd.argoproj.io/secret-type=repository -o yaml | kx apply -f - >/dev/null
+}
+# eso_store_restore: the caProvider ConfigMap external-secrets/lab-ca and the ClusterSecretStore openbao (Y05)
+eso_store_restore() {
+  kx -n external-secrets create configmap lab-ca --from-file=ca.crt="$CA_DIR/ca.crt" --dry-run=client -o yaml | kx apply -f - >/dev/null \
+    && kx apply -f "$ADDONS/eso-store.yaml" >/dev/null
+}
 
 gitops_gw() {
   local init
@@ -123,7 +157,8 @@ gitops_gw() {
   fi
   gx /user >/dev/null || die "Gitea token does not work"
   gx /repos/lab/gitops >/dev/null 2>&1 || gx /user/repos -X POST -d '{"name":"gitops","private":true,"default_branch":"main"}' >/dev/null
-  ok "Gitea: user lab, private repo lab/gitops"
+  gitea_argocd_user || die "Gitea user argocd could not be set up"
+  ok "Gitea: users lab (admin) + argocd (read-only collaborator), private repo lab/gitops"
 }
 
 # ----------------------------------------------------------------- CoreDNS ----
@@ -174,8 +209,7 @@ gitops_stack() {
   rm -f "$ca"
   bx write auth/kubernetes/role/eso bound_service_account_names=eso-auth bound_service_account_namespaces=external-secrets \
     audience=openbao token_policies=lab-read token_ttl=1h >/dev/null
-  kx -n external-secrets create configmap lab-ca --from-file=ca.crt="$CA_DIR/ca.crt" --dry-run=client -o yaml | kx apply -f - >/dev/null
-  retry 120 kx apply -f "$ADDONS/eso-store.yaml" || die "ClusterSecretStore not accepted (ESO webhook?)"
+  retry 120 eso_store_restore || die "ClusterSecretStore not accepted (ESO webhook?)"
   retry 120 store_ready || die "ClusterSecretStore openbao not Ready: $(kx get clustersecretstore openbao -o jsonpath='{.status.conditions[0].message}')"
   ok "ClusterSecretStore openbao Ready"
 
@@ -186,9 +220,8 @@ gitops_stack() {
     kx -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d > "$ARGO_DIR/admin-password"
     chmod 600 "$ARGO_DIR/admin-password"
   fi
-  kx -n argocd create secret generic repo-gitops --from-literal=type=git --from-literal=url="$GITOPS_REPO" \
-    --from-literal=username=lab --from-literal=password="$(cat "$GITEA_DIR/token")" --dry-run=client -o yaml \
-    | kx label --local -f - argocd.argoproj.io/secret-type=repository -o yaml | kx apply -f - >/dev/null
+  [ -s "$GITEA_DIR/argocd-password" ] || die "no Gitea user argocd yet: ./lab gitops gw"
+  argo_repo_secret
   ok "Argo CD up; admin password in $(rel "$ARGO_DIR")/admin-password; repo $GITOPS_REPO registered"
 }
 
@@ -298,6 +331,7 @@ ${C_BOLD}Web UIs and endpoints${C_0} (credentials are lab-only, kept in $(rel "$
   Ingress   http://192.168.56.200                 Traefik (MetalLB): curl -H 'Host: demo.lab' / 'Host: shop.lab'
             demo needs "Authorization: Bearer \$(cat $(rel "$STATE_DIR")/demo-token)"
   Registry  http://192.168.56.20:5000/v2/_catalog   (registry.lab:5000 inside the cluster)
+            private: registry.lab:5001, the same images behind user ci / \$(./lab node gw cat /etc/k8slab/registry-ci.password)
   Files     $GW_FILES/                 pinned binaries, charts and the apt repo
 ${C_BOLD}Nodes${C_0} (./lab node <name>)
 EOF

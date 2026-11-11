@@ -23,8 +23,9 @@ Listens on **8080**. Runs as **uid 10001** (gid 0). Python is PID 1 and handles 
 | `2.0.0-rc1` | `APP_VERSION=2.0.0-rc1 REQUIRED_ENV=FEATURE_FLAGS_URL` | release candidate that exits 1 on start (D03) |
 
 P03 (`exec format error`) needs an arm64 image under an amd64 tag. `build.sh` doesn't make one (no
-emulation on this host); copy any arm64 image there, e.g. `crane copy --platform linux/arm64
-python:3.12-slim registry.lab:5000/lab/labapp:1.6`.
+emulation on this host): `lab/labapp:1.6` is the arm64 `python:3.12.16-slim`, copied by gw's `sync.sh`
+(`LAB_IMAGES` in `versions.env`, `%linux/arm64`). It starts with "exec /usr/local/bin/python3: exec format
+error".
 
 ## Settings
 

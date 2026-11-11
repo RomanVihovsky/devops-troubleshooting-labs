@@ -36,14 +36,17 @@ timeout (`KX_TIMEOUT`), so a dead API fails a check instead of hanging it.
 
 Add **`gitops: true`** when the scenario commits to `lab/gitops`. The cleanup then force-pushes the tag
 `baseline` to `main`, and Argo CD re-syncs and waits until `lab-apps`, `demo` and `shop` are Synced and
-Healthy. The student also gets `workspace/gitops`. Applications and AppProjects outside the baseline are
-deleted, apps first. An app whose AppProject is already gone has its finalizer stripped: Argo CD can't
+Healthy. It also puts back Argo CD's repo Secret `argocd/repo-gitops` (Gitea user `argocd`, read-only; D05
+rotates its password) and the spec of the hand-bootstrapped root app `lab-apps` (D11). The student also gets
+`workspace/gitops`. Applications and AppProjects outside the baseline are deleted, apps first. An app whose AppProject is already gone has its finalizer stripped: Argo CD can't
 finalize it, and it would keep `lab-apps` unhealthy (D04). Its resources must sit in the scenario's
 `namespaces:`, which the cleanup deletes next.
 
 Add **`openbao: true`** when setup or the student may change OpenBao (kv paths, policies, auth roles). The
 cleanup then restores the raft snapshot that `./lab cluster golden` saved (`.state/golden/openbao.snap`), in
 about 7 s, with the same root token. ESO picks the store up again by itself. This is much cheaper than `gw`.
+If OpenBao is sealed or down (Y06 breaks its seal key), `/etc/openbao` comes back from the gw golden and
+OpenBao restarts first.
 
 Every cleanup also **normalizes the Node objects**:
 - it uncordons every node;
@@ -52,6 +55,10 @@ Every cleanup also **normalizes the Node objects**:
   `node.kubernetes.io/*` taints, but removing `out-of-service`.
 
 Any other Node labels a scenario adds (e.g. `disktype`) go in its `cleanup.sh`.
+
+A `node` reset also re-enables chrony and waits (up to 30 s) for the clock to sync (L16 disables it and
+moves the clock 400 days back). It deletes `Failed` pods in every namespace: evictions (R04, R08) leave
+them behind, and `cluster_quick` would count them as broken system pods.
 
 **Rule of thumb**: if setup or a plausible wrong fix can change an object you didn't create, use `cluster`.
 After every cleanup, `cluster_quick` checks nodes, system pods and Argo apps. If that fails, the next `start`
@@ -80,6 +87,13 @@ escalates to a full `cluster reset` by itself.
 | `gx /api/path` / `bx <bao args>` | Gitea API (user lab) / OpenBao CLI (root) |
 | `check desc cmd..` / `check_eventually s desc cmd..` / `verdict` | verify building blocks |
 | `remember k v` / `recall k` | facts from setup to verify (kept in `.state`) |
+| `https_out host [path]` | HTTPS status from the desktop through the LB (443), the cert verified against the lab CA for `host`; `000` = TLS failed (Traefik's default cert, wrong name) |
+| `load_test ns url [-c N -d S --rps N]` | `labapp load` from a throwaway pod: JSON `{requests, errors, codes, rps, p50_ms, p90_ms, p99_ms}` (`{}` if the pod failed). Runs without the 10 s API timeout of verify |
+| `node_reboot node [s]` | reboot from inside the guest, wait for a new boot id over SSH. Not for Ready: the caller decides what "back" means |
+| `user_kubeconfig user group[,group] file` | a client cert from the cluster CA through the CSR API (CSR `lab-<user>`, labelled) + a kubeconfig that uses it |
+| `registry_ci_password` / `private_registry_ok` | the private registry `registry.lab:5001` (same images, read-only, user `ci`): its password / "401 anonymous, ci can read" |
+| `gitea_argocd_user` / `argo_repo_secret` | Argo CD's Gitea account (password back to `.state/gitea/argocd-password`) / its repo Secret |
+| `eso_store_restore` | the caProvider ConfigMap `external-secrets/lab-ca` + ClusterSecretStore `openbao` as built |
 
 Gotchas:
 - **`check_eventually 60 "x" test "$(cmd)" = y` evaluates `$(cmd)` once.** Wrap it in a function.
@@ -120,6 +134,11 @@ Gotchas:
 - **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
   match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
   the binary for the string when in doubt.
+
+Lab images beyond labapp (`LAB_IMAGES` in `versions.env`, mirrored by gw's `sync.sh`; `<path>=<ref>[%platform]`):
+`lab/redis:7-alpine`, `lab/postgres:16-alpine`, `lab/nginx:1.30-alpine`, and `lab/labapp:1.6`, an **arm64**
+python image under an ordinary tag (P03: `exec format error`). `registry.lab:5001` serves the same images
+behind htpasswd (P02: pulls need an imagePullSecret); every node has a `certs.d` entry for it.
 
 ## Build your own scenario
 
