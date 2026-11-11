@@ -1,0 +1,10 @@
+id: L09
+title: Images never pull on k8s-w1 - the same image works everywhere else
+kind: incident
+level: 2
+domain: nodes
+wave: 2
+est: 15m
+reset: node
+nodes: [w1]
+namespaces: [edge]

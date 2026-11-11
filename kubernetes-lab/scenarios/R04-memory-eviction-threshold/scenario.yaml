@@ -1,0 +1,10 @@
+id: R04
+title: 'Pods evicted on k8s-w2: "The node was low on resource: memory"'
+kind: incident
+level: 2
+domain: resources
+wave: 2
+est: 20m
+reset: node
+nodes: [w2]
+namespaces: [payments]

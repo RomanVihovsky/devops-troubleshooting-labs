@@ -77,7 +77,7 @@ escalates to a full `cluster reset` by itself.
 | `tcp_ok_as ns labels\|- host:port` / `check_reach <<'EOF'` | TCP connect from a throwaway agnhost pod that carries `labels` (the NetworkPolicy view); `check_reach` = one check per row `ns labels host:port open\|blocked`, probes in parallel. Don't give a probe labels that a ReplicaSet selects - it would adopt it |
 | `answer key` / `answered key truth [alt..]` | exploration labs: the student's `workspace/<ID>/answers.yaml` vs. the live value (trimmed, case-insensitive) |
 | `cluster_bare_build <version>` | a bare cluster (control plane + workers + Calico) at an older version, cp1's PKI kept (CA + SA key: the desktop kubeconfig stays valid) - for upgrade labs; needs `reset: cluster` |
-| `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready, no restart in the last s seconds (`lastState.terminated.finishedAt`) and none while watching s seconds" |
+| `restarts ns selector` / `stable_for s ns selector` | restart counters / "Ready, no restart in the last s seconds (`lastState.terminated.finishedAt`) and none while watching s seconds" (Failed/Succeeded pods, e.g. evicted ones, are ignored) |
 | `crashlooping ns selector` | a container waits in CrashLoopBackOff **or** has restarted at least twice after a non-zero exit - for setups that wait for a crash loop |
 | `deploy_ready ns name [n]` / `has_endpoints ns svc` | ready = updated = total replicas (n, default spec.replicas) / the Service has a ready EndpointSlice address |
 | `can_i <user|system:serviceaccount:ns:sa> verb resource [-n ns]` | RBAC from the subject's point of view. Subresources: `can_i anna create pods --subresource=exec` - `pods/exec` would mean a pod *named* exec |

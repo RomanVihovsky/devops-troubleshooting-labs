@@ -1,0 +1,10 @@
+id: S12
+title: 'Pending: "Too many pods" on a cluster that is half idle'
+kind: incident
+level: 2
+domain: scheduling
+wave: 2
+est: 15m
+reset: node
+nodes: [w1, w2, w3]
+namespaces: [reports]

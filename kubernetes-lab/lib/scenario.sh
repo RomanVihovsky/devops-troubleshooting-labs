@@ -118,9 +118,11 @@ stable_for() {
   local t=$1 ns=$2 sel=$3 r0
   restarted_within "$ns" "$sel" "$t" && return 1
   [ -n "${LAB_EXPECT_FAIL:-}" ] && t=3
-  kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=60s >/dev/null 2>&1 || return 1
+  # (Failed/Succeeded pods never turn Ready - evicted pods stay behind as Failed objects, R04)
+  local live=--field-selector=status.phase!=Failed,status.phase!=Succeeded
+  kx -n "$ns" wait --for=condition=Ready pod -l "$sel" "$live" --timeout=60s >/dev/null 2>&1 || return 1
   r0=$(restarts "$ns" "$sel"); sleep "$t"
-  [ "$(restarts "$ns" "$sel")" = "$r0" ] && kx -n "$ns" wait --for=condition=Ready pod -l "$sel" --timeout=5s >/dev/null 2>&1
+  [ "$(restarts "$ns" "$sel")" = "$r0" ] && kx -n "$ns" wait --for=condition=Ready pod -l "$sel" "$live" --timeout=5s >/dev/null 2>&1
 }
 # http_code <ns> <url> [header]: HTTP status seen from inside the cluster (a throwaway busybox pod in <ns>). Only
 # the status header line counts: on 4xx/5xx busybox wget adds "wget: server returned error: HTTP/1.1 ..."

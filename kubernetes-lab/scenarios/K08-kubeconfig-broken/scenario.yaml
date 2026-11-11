@@ -1,0 +1,9 @@
+id: K08
+title: Your kubectl stopped working, everyone else's works
+kind: incident
+level: 1
+domain: control-plane
+wave: 2
+est: 10m
+reset: ns
+namespaces: []

@@ -1,0 +1,9 @@
+id: K15
+title: Rejoining k8s-w3 fails - the wiki's join command doesn't work
+kind: incident
+level: 2
+domain: control-plane
+wave: 2
+est: 30m
+reset: cluster
+namespaces: []

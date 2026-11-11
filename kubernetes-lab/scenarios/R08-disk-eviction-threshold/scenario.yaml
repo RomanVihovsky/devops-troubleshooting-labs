@@ -1,0 +1,10 @@
+id: R08
+title: k8s-w3 DiskPressure - pods evicted, images deleted, the disk is three-quarters empty
+kind: incident
+level: 2
+domain: resources
+wave: 2
+est: 20m
+reset: node
+nodes: [w3]
+namespaces: [ingest]

@@ -1,0 +1,9 @@
+id: K09
+title: kube-apiserver crash-loops after enabling audit logging
+kind: incident
+level: 2
+domain: control-plane
+wave: 2
+est: 20m
+reset: cluster
+namespaces: []
