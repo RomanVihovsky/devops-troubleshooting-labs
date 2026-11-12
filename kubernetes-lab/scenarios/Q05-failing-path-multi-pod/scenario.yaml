@@ -1,0 +1,9 @@
+id: Q05
+title: Find the failing request path in the logs of 6 pods
+kind: incident
+level: 2
+domain: observability
+wave: 2
+est: 15m
+reset: ns
+namespaces: [edge]

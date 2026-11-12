@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: invoicer, namespace: billing2}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: invoicer}}
+  template:
+    metadata: {labels: {app: invoicer}}
+    spec:
+      containers:
+        - name: invoicer
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: invoicer}
+            - {name: LOG_FILE, value: /var/log/labapp/app.log}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: invoicer, namespace: billing2}
+spec: {selector: {app: invoicer}, ports: [{port: 8080}]}

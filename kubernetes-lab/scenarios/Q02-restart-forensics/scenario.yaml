@@ -1,0 +1,9 @@
+id: Q02
+title: Why did the pod restart at 03:00?
+kind: incident
+level: 1
+domain: observability
+wave: 2
+est: 10m
+reset: ns
+namespaces: [nightly]

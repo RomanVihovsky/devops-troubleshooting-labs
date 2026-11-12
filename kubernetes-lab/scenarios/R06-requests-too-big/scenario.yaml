@@ -1,0 +1,9 @@
+id: R06
+title: Pods Pending while the nodes are mostly idle
+kind: incident
+level: 2
+domain: resources
+wave: 2
+est: 10m
+reset: ns
+namespaces: [analytics2]

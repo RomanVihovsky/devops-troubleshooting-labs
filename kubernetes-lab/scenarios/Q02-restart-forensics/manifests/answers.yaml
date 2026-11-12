@@ -1,0 +1,5 @@
+# Q02 - the facts of the restart (./lab verify compares them with the cluster)
+container:          # name of the container that restarted
+reason:             # the termination reason Kubernetes recorded
+exit_code:          # its exit code
+memory_limit:       # that container's memory limit, as in the spec (e.g. 512Mi)
