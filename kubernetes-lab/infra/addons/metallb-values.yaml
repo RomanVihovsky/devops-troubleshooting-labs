@@ -1,0 +1,6 @@
+# MetalLB in plain L2 mode: no FRR / FRR-K8s (0.16 enables FRR-K8s by default). Pool + L2Advertisement: metallb-config.yaml
+frrk8s:
+  enabled: false
+speaker:
+  frr:
+    enabled: false

@@ -1,0 +1,6 @@
+# values for release "web" (namespace t10)
+image:
+  tag: "1.3"
+replicaCount: 2
+app:
+  name: t10-web

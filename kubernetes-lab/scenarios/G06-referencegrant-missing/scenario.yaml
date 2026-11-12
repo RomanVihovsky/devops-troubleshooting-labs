@@ -1,0 +1,9 @@
+id: G06
+title: 'HTTPRoute ResolvedRefs: False, RefNotPermitted'
+kind: incident
+level: 2
+domain: ingress
+wave: 2
+est: 15m
+reset: ns
+namespaces: [web-front, web-back]

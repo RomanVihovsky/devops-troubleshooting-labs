@@ -1,0 +1,9 @@
+id: A04
+title: 'Deployment has 0 pods, `kubectl get pods` is empty'
+kind: incident
+level: 2
+domain: security
+wave: 2
+est: 15m
+reset: ns
+namespaces: [secure-apps]

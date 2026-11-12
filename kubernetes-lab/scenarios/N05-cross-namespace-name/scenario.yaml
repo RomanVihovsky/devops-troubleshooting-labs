@@ -1,0 +1,10 @@
+id: N05
+title: Pods in frontend can't reach api
+kind: incident
+level: 1
+domain: services
+wave: 1
+est: 10m
+reset: ns
+namespaces: [storefront, inventory-api]
+gitops: false

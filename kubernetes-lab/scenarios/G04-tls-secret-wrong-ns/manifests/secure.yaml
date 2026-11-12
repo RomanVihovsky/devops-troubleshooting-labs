@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: secure, namespace: secure}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: secure}}
+  template:
+    metadata: {labels: {app: secure}}
+    spec:
+      containers:
+        - name: secure
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: secure}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: secure, namespace: secure}
+spec: {selector: {app: secure}, ports: [{name: http, port: 8080, targetPort: 8080}]}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: secure, namespace: secure}
+spec:
+  tls: [{hosts: [secure.lab], secretName: secure-tls}]
+  rules:
+    - host: secure.lab
+      http:
+        paths: [{path: /, pathType: Prefix, backend: {service: {name: secure, port: {number: 8080}}}}]

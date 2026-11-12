@@ -1,0 +1,11 @@
+id: L04
+title: k8s-w3 NotReady - network plugin not ready, cni config uninitialized
+kind: incident
+level: 2
+domain: nodes
+wave: 1
+est: 15m
+reset: node
+nodes: [w3]
+namespaces: []
+gitops: false

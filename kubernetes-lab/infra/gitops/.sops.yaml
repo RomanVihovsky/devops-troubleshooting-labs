@@ -1,0 +1,5 @@
+# SOPS: files under secrets/ are encrypted for the lab's age key (private key: .state/age.key on the desktop)
+creation_rules:
+  - path_regex: ^secrets/.*\.ya?ml$
+    encrypted_regex: ^(data|stringData)$
+    age: @AGE_RECIPIENT@

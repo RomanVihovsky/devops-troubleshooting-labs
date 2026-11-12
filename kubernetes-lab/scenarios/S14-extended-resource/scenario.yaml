@@ -1,0 +1,9 @@
+id: S14
+title: 'Pod requests an accelerator: "Insufficient example.com/gpu"'
+kind: incident
+level: 2
+domain: scheduling
+wave: 2
+est: 15m
+reset: ns
+namespaces: [ml]

@@ -1,0 +1,9 @@
+id: R05
+title: 'Pods rejected: "minimum cpu usage per Container is 200m"'
+kind: incident
+level: 1
+domain: resources
+wave: 2
+est: 10m
+reset: ns
+namespaces: [team-b]

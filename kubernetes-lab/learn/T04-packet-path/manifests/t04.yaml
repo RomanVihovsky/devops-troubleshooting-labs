@@ -1,0 +1,33 @@
+# T04: client (k8s-w1) -> Service web:80 -> web pod (k8s-w3, agnhost netexec :8080)
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: t04}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: web}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: k8s-w3}
+      containers:
+        - name: web
+          image: @AGNHOST@
+          args: [netexec, --http-port=8080]
+          ports: [{name: http, containerPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: t04}
+spec:
+  selector: {app: web}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: client, namespace: t04, labels: {app: client}}
+spec:
+  nodeName: k8s-w1
+  containers:
+    - name: client
+      image: @AGNHOST@
+      args: [pause]

@@ -1,0 +1,10 @@
+id: D03
+title: Auto-sync deployed a bad commit - Argo CD says Synced, demo is down
+kind: incident
+level: 2
+domain: delivery
+wave: 1
+est: 15m
+reset: ns
+namespaces: []
+gitops: true

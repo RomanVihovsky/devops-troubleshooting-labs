@@ -1,0 +1,10 @@
+id: V09
+title: Pod stuck ContainerCreating - hostPath type check failed
+kind: incident
+level: 1
+domain: storage
+wave: 1
+est: 10m
+reset: ns
+namespaces: [agent]
+gitops: false

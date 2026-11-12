@@ -1,0 +1,10 @@
+id: K02
+title: apiserver gone after the "hardening" - three mistakes, one of them in metadata
+kind: incident
+level: 3
+domain: control-plane
+wave: 1
+est: 30m
+reset: cluster
+namespaces: []
+gitops: false

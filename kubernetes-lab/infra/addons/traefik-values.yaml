@@ -1,0 +1,15 @@
+# Traefik: Ingress (default IngressClass) + Gateway API, LoadBalancer 192.168.56.200 from MetalLB
+providers:
+  kubernetesGateway:
+    enabled: true
+gateway:
+  listeners:
+    web:
+      namespacePolicy:
+        from: All
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+service:
+  annotations:
+    metallb.io/loadBalancerIPs: 192.168.56.200

@@ -1,0 +1,12 @@
+# Gateway API HTTPRoute + headless Service + DNS peer discovery
+httpRoute:
+  enabled: true
+  hostnames: [labapp.lab, www.labapp.lab]
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+      sectionName: web
+app:
+  peers: {discovery: dns}
+headless:
+  publishNotReadyAddresses: true

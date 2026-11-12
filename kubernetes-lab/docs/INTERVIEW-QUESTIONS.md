@@ -1,4 +1,4 @@
-# Kubernetes interview question bank (~170)
+# Kubernetes interview question bank (~210)
 
 Each question has the **key points** a strong answer covers. Lab scenario IDs in brackets
 show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M) mid, (S) senior/SRE.
@@ -43,10 +43,10 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 
 ## 3. Configuration & secrets
 
-31. **ConfigMap vs Secret; are Secrets encrypted?** (J) - base64 only; enable encryption at rest (EncryptionConfiguration, KMS); RBAC on secrets. [A07]
+31. **ConfigMap vs Secret; are Secrets encrypted?** (J) - base64 only; enable encryption at rest (EncryptionConfiguration, KMS); RBAC on secrets. [A07, K16]
 32. **Why didn't my app pick up the ConfigMap change?** (J) - env vars fixed at start; volume updates eventually; `subPath` never updates; checksum annotation pattern. [C01, C02]
 33. **Immutable ConfigMaps/Secrets - why use them?** (M) - performance (no watches), safety; rotate via new name. [C06]
-34. **How do you get Secrets into the cluster safely (GitOps)?** (S) - Sealed Secrets, SOPS, External Secrets Operator, CSI secrets store, Vault.
+34. **How do you get Secrets into the cluster safely (GitOps)?** (S) - Sealed Secrets, SOPS, External Secrets Operator, CSI secrets store, Vault/OpenBao (details in section 17). [Y01, Y03, Y09]
 35. **Downward API - what can you expose?** (M) - pod name/ns/IP/labels/annotations, resource limits. [C08]
 36. **Common base64/newline pitfalls with Secrets.** (M) - `echo -n`, `--from-file` newlines, `stringData`. [C03, C07]
 
@@ -60,7 +60,7 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 42. **How does the scheduler score nodes?** (S) - filter (predicates) then score (plugins: LeastAllocated, ImageLocality, ...), scheduling framework, profiles.
 43. **What does cordon / drain / uncordon do exactly?** (J) - unschedulable flag; eviction API respecting PDBs; DaemonSets, emptyDir flags. [S06, W12, O07]
 44. **Multiple schedulers / `schedulerName`.** (M) - custom profiles; pods silently Pending if scheduler missing. [S07]
-45. **What happens to pods when a node dies?** (M) - node NotReady -> taint `unreachable` -> eviction after tolerationSeconds (300 s default) -> Deployment pods recreated; StatefulSet pods NOT until node confirmed gone (at-most-one semantics). [L01]
+45. **What happens to pods when a node dies?** (M) - node NotReady -> taint `unreachable` -> eviction after tolerationSeconds (300 s default) -> Deployment pods recreated; StatefulSet pods NOT until node confirmed gone (at-most-one semantics). [L01, L11, L12]
 
 ## 5. Workload controllers
 
@@ -141,7 +141,7 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 105. **securityContext essentials.** (J) - runAsNonRoot, runAsUser, readOnlyRootFilesystem, allowPrivilegeEscalation, capabilities drop ALL, seccomp RuntimeDefault. [A05, A06]
 106. **How do users authenticate? Issuing a user certificate via the CSR API.** (M) - client certs, OIDC, tokens; CSR approve + signerName. [A08, K12]
 107. **A webhook broke the cluster - what now?** (S) - failurePolicy, timeoutSeconds, namespaceSelector, delete/patch the webhook config. [A09]
-108. **Secrets hygiene: encryption at rest, RBAC, audit, rotation.** (S)
+108. **Secrets hygiene: encryption at rest, RBAC, audit, rotation.** (S) [K16, A13, Y07]
 109. **Image security: signing, scanning, admission policy (Kyverno/Gatekeeper), pull secrets.** (M) [P02]
 110. **What is the attack path from `pods/exec` or `create pods` to cluster-admin?** (S) - privileged pods, hostPath, SA token theft; why these verbs are sensitive.
 
@@ -153,12 +153,12 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 114. **etcd backup & restore procedure.** (S) - `etcdctl snapshot save` with certs, `etcdutl snapshot restore` to new data-dir, point static pod at it. [K06]
 115. **etcd "database space exceeded".** (S) - quota, compaction, defrag, alarm disarm, event TTL/object churn. [K11]
 116. **Certificate expiry in kubeadm clusters.** (S) - 1 year default, `kubeadm certs check-expiration/renew`, kubelet client rotation, restart static pods. [K07]
-117. **kubeadm upgrade sequence.** (S) - control plane first (one minor at a time), drain, kubeadm upgrade apply/node, kubelet+kubectl, uncordon; version skew policy. [O12]
+117. **kubeadm upgrade sequence.** (S) - control plane first (one minor at a time), drain, kubeadm upgrade apply/node, kubelet+kubectl, uncordon; version skew policy. [K13]
 118. **Version skew rules.** (M) - kubelet may be up to 3 minors older than apiserver, never newer; kubectl +/-1.
 119. **High availability control plane - what matters?** (S) - stacked vs external etcd, LB in front of apiservers, quorum.
 120. **Namespace stuck Terminating.** (M) - finalizers on remaining objects / unavailable APIServices; never blindly patch the namespace. [O01]
 121. **ResourceQuota and LimitRange interplay.** (M) - quota requiring requests, LimitRange defaults/min/max. [R05, R10]
-122. **Helm: release stuck, upgrade failures, ownership.** (M) - `helm history`, rollback, release secrets, meta.helm.sh annotations. [O04, O05]
+122. **Helm: release stuck, upgrade failures, ownership.** (M) - `helm history`, rollback, release secrets, meta.helm.sh annotations. [O04, O05, D08]
 123. **Kustomize bases/overlays/patches; when vs Helm.** (M) [O08]
 124. **Auditing: who changed/deleted something?** (S) - audit policy levels, log backend, events retention. [O09]
 
@@ -171,7 +171,7 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 129. **Node pressure evictions vs API-initiated evictions.** (M) - thresholds, soft/hard, grace periods, taints. [R04, R08]
 130. **Image garbage collection and disk usage on nodes.** (M) - imageGCHigh/LowThresholdPercent, `crictl rmi --prune`. [R08]
 131. **`kubectl logs`/`exec` fail but pods run - why?** (S) - apiserver -> kubelet connectivity, node InternalIP, kubelet serving certs, firewall 10250. [L06]
-132. **Swap and Kubernetes.** (M) - historically unsupported; NodeSwap feature, failSwapOn.
+132. **Swap and Kubernetes.** (M) - historically unsupported; NodeSwap feature, failSwapOn. [L14]
 133. **Where are container logs on a node?** (J) - `/var/log/pods`, `/var/log/containers`, rotation by kubelet.
 134. **What happens to node-local data when a node is replaced?** (M) - local PVs bound to node, StatefulSets stuck.
 
@@ -200,7 +200,7 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 
 150. **Deploys cause a burst of 502s - why and how to fix?** (S) - endpoint removal race, preStop, readiness, graceful shutdown, maxUnavailable. [P16]
 151. **Cluster DNS is slow at peak - what do you check?** (S) - CoreDNS CPU/replicas, ndots, cache, NodeLocal DNS, conntrack. [N08]
-152. **A node died at night: walk through what Kubernetes did and what you check in the morning.** (S) [L01]
+152. **A node died at night: walk through what Kubernetes did and what you check in the morning.** (S) [L01, L11]
 153. **etcd is slow - effects and diagnosis.** (S) - fsync latency (disk), large objects, too many events, compaction; apiserver latency spikes.
 154. **You upgraded the cluster and some manifests fail - why?** (M) - removed APIs, PSP removal, feature gates. [O03]
 155. **Design multi-tenant namespaces for 10 teams.** (S) - RBAC, quotas, LimitRanges, PSA, NetworkPolicy default deny, separate node pools, policy engine. [B03]
@@ -210,18 +210,65 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 159. **Explain a production incident you handled - structure.** (all) - detect, mitigate, root cause, follow-ups; blameless postmortem.
 160. **How do you prevent "works in staging, breaks in prod"?** (M) - same manifests via overlays, policy checks in CI, image digests, admission policies. [B05]
 
-## 16. Quick-fire (one-liners)
+## 16. Helm & GitOps (Argo CD)
 
-161. Get all pods not Running cluster-wide - `kubectl get pods -A --field-selector=status.phase!=Running`
-162. Sort events by time - `kubectl get events -A --sort-by=.lastTimestamp`
-163. Previous container logs - `kubectl logs <pod> -c <c> --previous`
-164. Check what you can do - `kubectl auth can-i --list -n ns`
-165. Which pods run on a node - `kubectl get pods -A -o wide --field-selector spec.nodeName=<node>`
-166. Decode a secret - `kubectl get secret s -o jsonpath='{.data.key}' | base64 -d`
-167. Restart a deployment - `kubectl rollout restart deploy/x`
-168. Explain a field - `kubectl explain pod.spec.containers.livenessProbe --recursive`
-169. Dry-run + diff - `kubectl diff -f x.yaml`, `kubectl apply --dry-run=server`
-170. Temporary debug pod - `kubectl run tmp --rm -it --image=nicolaka/netshoot -- bash`
+161. **Helm rollback vs Argo CD rollback vs `git revert` - which one when?** (M) - `helm rollback` re-applies a stored release revision (release Secrets); Argo CD renders with `helm template` and keeps no Helm release, so with self-heal a live rollback is undone within seconds; Argo CD's own rollback needs auto-sync off; in GitOps the durable fix is `git revert`, so Git stays the truth. [D03, D08]
+162. **What is drift, and what do auto-sync and self-heal each do about it?** (M) - live ≠ Git = OutOfSync; auto-sync applies new Git revisions; self-heal also re-applies when the live state changes; manual hotfixes vanish or linger as OutOfSync; first decide whether Git or live is right, then commit or sync. [D02]
+163. **Sync status vs health status.** (J) - Synced = live matches Git; Healthy = the resources actually work (rollout progressing, pods Ready); Synced + Degraded is normal after a bad image; sync itself fails only on apply errors (schema, immutable field, RBAC, project policy). [D03, D07]
+164. **An app stays OutOfSync forever though nobody touches it. Why?** (M) - fields changed by controllers, webhooks or defaulting: HPA-owned `replicas`, injected sidecars, CRD defaults; fix: drop the field from Git, or `ignoreDifferences` + `RespectIgnoreDifferences=true`, server-side diff. [D06]
+165. **What does an AppProject restrict?** (M) - source repos, destinations (cluster + namespace), cluster/namespaced resource allow/deny lists, project roles, sync windows; "not permitted in project" is Argo CD policy, `Forbidden` is the controller's Kubernetes RBAC; grant the minimum, never `*`. [D04]
+166. **Argo CD can't reach the Git repo - triage.** (J) - repo connection state, repo Secret labelled `argocd.argoproj.io/secret-type: repository`, credentials/TLS/known_hosts, repo-server logs, NetworkPolicy egress from repo-server, DNS. [D05, X10]
+167. **Prune: what does it delete, and how do you protect stateful resources?** (S) - resources tracked by the app but gone from Git; a PVC with `Delete` reclaim takes the data with it; `Prune=false` / `Delete=false` sync-option annotations, `helm.sh/resource-policy: keep` for plain Helm, `Retain` reclaim policy, backups. [D12]
+168. **Sync phases, waves and hooks: in what order do things apply, and why does a hook hang?** (M) - PreSync → Sync → PostSync (SyncFail on error), lower wave first inside a phase; hooks must complete or be healthy; a hook that needs a resource from a later phase waits forever; `hook-delete-policy: BeforeHookCreation`. [D09]
+169. **Helm values precedence; "my value is ignored" - how do you debug it?** (J) - chart `values.yaml` < parent chart values < `-f` files left to right (last wins) < `--set`; key typos are silently ignored; `helm template --debug`, `helm get values`, `values.schema.json`. [D01, D10]
+170. **Why must a chart's selector labels never include the version?** (M) - `spec.selector` is immutable; a version label in the selector breaks every upgrade; keep selectors to stable `app.kubernetes.io/name` + `instance`. [D07, W02]
+171. **App of apps vs ApplicationSet.** (M) - a root app renders child Application manifests from a path (directory recursion, children must live in the Argo CD namespace); ApplicationSet generators (git, list, cluster, matrix) template many apps; bootstrap and blast radius. [D11]
+172. **What should Argo CD manage, and what should it not?** (S) - apps vs cluster addons; bootstrap order (CNI, CSI, CRDs, Argo CD itself); self-heal fighting operators or break-glass fixes; cluster-scoped resources and project boundaries.
+173. **GitOps DR: the cluster is rebuilt from scratch. What do you need besides Git?** (S) - Argo CD install + repo credentials, the Sealed Secrets key, a reachable and unsealed secret backend with its auth config, CRD ordering, PV data backups; rehearse it. [B07, Y02]
+
+## 17. Secrets management
+
+174. **Sealed Secrets: how does it work, and what are the scopes?** (M) - the controller holds the private key; `kubeseal` encrypts with the public cert; strict (name + namespace), namespace-wide, cluster-wide; renaming or moving a strict secret means resealing. [Y01]
+175. **The Sealed Secrets controller key is gone. What happens, and how do you prevent it?** (S) - the controller generates a new key and existing SealedSecrets no longer decrypt; back up the key Secrets (label `sealedsecrets.bitnami.com/sealed-secrets-key`), restore them and restart the controller; key renewal (30 d) keeps old keys for decryption. [Y02]
+176. **ESO vs Vault Agent Injector vs Secrets Store CSI vs SOPS - when which?** (S) - ESO syncs backend values into native Secrets (GitOps-friendly, the value lands in etcd); the injector renders files into the pod through a sidecar (no Secret object, tied to Vault); CSI mounts at pod start (optional sync); SOPS encrypts in Git and decrypts at deploy time, no runtime backend; trade-offs: rotation, etcd exposure, backend as a runtime dependency. [Y03, Y09]
+177. **An ExternalSecret isn't syncing - triage path.** (M) - ExternalSecret conditions/events, SecretStore Ready, provider auth (role ↔ SA + namespace), remote path, TLS (`caProvider`), egress to the backend, ESO controller logs; never print values. [Y03, Y04, Y05, X09]
+178. **How does Kubernetes auth in Vault/OpenBao work?** (S) - the client presents its SA JWT; Vault validates it (TokenReview or JWKS); a role binds SA names + namespaces (and audience) to policies and returns a short-lived token; wrong SA or namespace = `permission denied`. [Y04]
+179. **Vault/OpenBao is sealed. What does that mean for the cluster?** (M) - the storage key is not in memory, so every read fails; existing Kubernetes Secrets (copies made by ESO) keep working, new or rotated values don't arrive; unseal with Shamir key shares, or auto-unseal (KMS, transit, HSM). [Y06]
+180. **You rotated a secret in the backend. When does the app see it?** (M) - ESO `refreshInterval` updates the Secret; env vars never change (a restart is needed), mounted files update after a delay (never with `subPath`), and the app must re-read them; checksum annotation / reloader; dual-credential rotation. [Y07, C01]
+181. **Two controllers write the same Secret - symptoms and fix.** (M) - the value flaps; ESO `creationPolicy` Owner / Merge / Orphan / None, ownerReferences; one source of truth per Secret, also between Sealed Secrets and ESO. [Y08]
+182. **SOPS + age: how do recipients work, and what happens when someone joins or leaves?** (M) - one data key per file, wrapped for each recipient; `.sops.yaml` creation_rules only apply to new files; `sops updatekeys` re-wraps existing files; when someone leaves: rotate the data key **and** the secret values they saw. [Y09]
+183. **How can a SOPS setup still leak plaintext into Git?** (S) - `path_regex` not matching, `encrypted_regex` missing `stringData`, a decrypted file committed, editor temp files; pre-commit/CI checks; once leaked, rotate - rewriting history is not enough. [Y10]
+184. **Reading a Secret through the API vs mounting it in a pod - what RBAC applies?** (M) - the kubelet fetches mounted / `secretKeyRef` Secrets with node credentials (Node authorizer), so the pod's SA needs no RBAC; API reads need `get` on `secrets`; `resourceNames` limits `get` but not a plain `list`; `list` exposes every value; `create pods` in a namespace ≈ read its Secrets. [A12, A07]
+185. **Encryption at rest: how do you enable it and prove it works?** (S) - EncryptionConfiguration (aescbc/aesgcm/secretbox/KMS v2); the first provider writes, all providers read, `identity` first = nothing encrypted; apiserver flag + hostPath mount; prove with `etcdctl get /registry/secrets/<ns>/<name>` (`k8s:enc:` prefix); rewrite existing Secrets; key rotation order; protect the config file. [K16]
+186. **Who read this Secret? How would you find out?** (S) - an audit policy rule for `secrets` at `Metadata` (Request/RequestResponse would log the values); audit events carry user/SA, source IPs, verb, timestamp; then review who can read it (`can-i --list`, who-can). [A13, O09]
+
+## 18. Node failure & cluster lifecycle
+
+187. **A worker is cut off from the network. Timeline of what Kubernetes does.** (S) - the kubelet stops renewing its Lease → after `node-monitor-grace-period` (40-50 s, version-dependent) the node goes Unknown and gets the `unreachable:NoExecute` taint → pods with the default 300 s `tolerationSeconds` are deleted → controllers recreate them elsewhere; containers on the partitioned node keep running. [L11, L12]
+188. **Why does a StatefulSet pod stay Terminating when its node is unreachable, and how do you recover safely?** (S) - at-most-one identity: without the kubelet's confirmation the pod object stays; fence the node first (power off, stop kubelet + containers), then force-delete or apply the `node.kubernetes.io/out-of-service` taint (also detaches volumes); force-delete without fencing risks two writers. [L11]
+189. **How do you make failover faster for one critical app, and what's the risk?** (M) - shorter `tolerationSeconds` for `unreachable`/`not-ready` on its pods; flapping nodes then cause churn; taint-based eviction doesn't go through the Eviction API, so PDBs don't slow it down. [L12]
+190. **A node is Ready but everything on it is slow. How do you find out why?** (M) - CPU throttling (`cpu.stat` `nr_throttled` on `kubepods.slice` / pod cgroups, `cpu.max`), steal time on VMs, disk I/O, probe timeouts; `kubectl top` shows usage, not throttling. [L13]
+191. **Which node settings must survive a reboot, and how do you check?** (M) - swap off (fstab) or NodeSwap configured, modules (`overlay`, `br_netfilter`) in modules-load.d, sysctls in sysctl.d, containerd + kubelet enabled; test by rebooting; `br_netfilter` matters for bridge CNIs (flannel, bridge plugin), not for routed Calico, and recent kubeadm no longer checks it. [L14, L15]
+192. **Clock skew on a node - symptoms and fix.** (M) - x509 "expired or not yet valid", SA token `nbf`/`exp` rejected, confusing log/event ordering, etcd warnings on control planes; chrony/NTP, `timedatectl`, `chronyc tracking`. [L16]
+193. **The node disk is full, but `du` doesn't find the space.** (M) - deleted-but-open files (`lsof +L1`), container logs, images, journald; kubelet image GC and DiskPressure eviction. [L17, R08]
+194. **conntrack table full - symptoms, cause, fix.** (S) - random new-connection timeouts, `nf_conntrack: table full, dropping packet` in dmesg, `conntrack -S` drops; kube-proxy `conntrack.maxPerCore`/`min`, storms of short connections, UDP DNS. [L18]
+195. **Walk through a kubeadm upgrade 1.36 → 1.37 on 1 control plane + 3 workers.** (S) - etcd snapshot first; read the changelog and skew rules; point the package repo at the new minor; cp1: upgrade the kubeadm package, `kubeadm upgrade plan`, `kubeadm upgrade apply v1.37.x` (static pods, addons, cert renewal), drain, kubelet + kubectl, restart, uncordon; then each worker: kubeadm package, `kubeadm upgrade node`, drain, kubelet + kubectl, restart, uncordon; one minor at a time; PDBs gate the drains; check CNI/addon compatibility. [K13]
+196. **What does `kubeadm join` need, and why does it fail?** (M) - a bootstrap token (24 h TTL; `kubeadm token create --print-join-command`), the discovery CA cert hash (pins the cluster CA), a reachable `controlPlaneEndpoint`; TLS bootstrap → auto-approved CSR → kubelet client cert; expired token or old CA hash = failed join. [K15]
+197. **What is `controlPlaneEndpoint`, and why set it even with one control plane?** (M) - a stable DNS name / LB address baked into kubeconfigs and certs; allows HA later without re-issuing certs; the LB needs health checks against healthy backends; it must be in the apiserver cert SANs. [K14, K17]
+198. **How do you add a SAN to the apiserver cert of a kubeadm cluster?** (S) - add it to `apiServer.certSANs` in the kubeadm-config ConfigMap (so upgrades keep it), move the old apiserver cert/key away, `kubeadm init phase certs apiserver --config ...`, restart the apiserver; check with `openssl x509 -noout -ext subjectAltName`. [K17]
+
+## 19. Quick-fire (one-liners)
+
+199. Get all pods not Running cluster-wide - `kubectl get pods -A --field-selector=status.phase!=Running`
+200. Sort events by time - `kubectl get events -A --sort-by=.lastTimestamp`
+201. Previous container logs - `kubectl logs <pod> -c <c> --previous`
+202. Check what you can do - `kubectl auth can-i --list -n ns`
+203. Which pods run on a node - `kubectl get pods -A -o wide --field-selector spec.nodeName=<node>`
+204. Decode a secret - `kubectl get secret s -o jsonpath='{.data.key}' | base64 -d`
+205. Restart a deployment - `kubectl rollout restart deploy/x`
+206. Explain a field - `kubectl explain pod.spec.containers.livenessProbe --recursive`
+207. Dry-run + diff - `kubectl diff -f x.yaml`, `kubectl apply --dry-run=server`
+208. Temporary debug pod - `kubectl run tmp --rm -it --image=nicolaka/netshoot -- bash`
 
 ---
 

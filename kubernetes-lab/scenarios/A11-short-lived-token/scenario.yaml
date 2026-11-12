@@ -1,0 +1,9 @@
+id: A11
+title: CI token suddenly rejected
+kind: incident
+level: 2
+domain: security
+wave: 2
+est: 15m
+reset: ns
+namespaces: [ci2]

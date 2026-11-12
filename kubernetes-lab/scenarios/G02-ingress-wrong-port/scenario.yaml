@@ -1,0 +1,9 @@
+id: G02
+title: 'Ingress answers 404, the controller logs "service port not found"'
+kind: incident
+level: 1
+domain: ingress
+wave: 2
+est: 10m
+reset: ns
+namespaces: [catalog2]

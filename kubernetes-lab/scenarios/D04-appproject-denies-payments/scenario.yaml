@@ -1,0 +1,10 @@
+id: D04
+title: payments won't sync - destination not allowed by project team-a
+kind: incident
+level: 2
+domain: delivery
+wave: 1
+est: 15m
+reset: ns
+namespaces: [payments]
+gitops: true

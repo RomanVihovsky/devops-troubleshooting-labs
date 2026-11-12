@@ -1,0 +1,10 @@
+id: L15
+title: Node audit after k8s-w3's reboot - net.bridge.bridge-nf-call-iptables missing
+kind: incident
+level: 1
+domain: nodes
+wave: 2
+est: 15m
+reset: node
+nodes: [w3]
+namespaces: []

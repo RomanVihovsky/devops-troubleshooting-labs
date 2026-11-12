@@ -1,0 +1,10 @@
+id: A01
+title: pods is forbidden - the RoleBinding is in the wrong namespace
+kind: incident
+level: 1
+domain: security
+wave: 1
+est: 10m
+reset: ns
+namespaces: [monitor]
+gitops: false

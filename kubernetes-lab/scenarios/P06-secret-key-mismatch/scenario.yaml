@@ -1,0 +1,10 @@
+id: P06
+title: CreateContainerConfigError after the secret rotation
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [ledger]
+gitops: false

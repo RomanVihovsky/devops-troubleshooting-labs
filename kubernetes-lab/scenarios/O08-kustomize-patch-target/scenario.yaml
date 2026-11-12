@@ -1,0 +1,9 @@
+id: O08
+title: Prod got dev settings - the Kustomize overlay does nothing
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [kust-prod]

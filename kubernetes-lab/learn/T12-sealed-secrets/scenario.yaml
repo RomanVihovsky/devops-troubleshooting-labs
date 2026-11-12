@@ -1,0 +1,9 @@
+id: T12
+title: Sealed Secrets - scopes, sealing-key backup, key loss and restore
+kind: learn
+level: 2
+domain: secrets
+est: 40m
+reset: cluster
+namespaces: [t12]
+gitops: false

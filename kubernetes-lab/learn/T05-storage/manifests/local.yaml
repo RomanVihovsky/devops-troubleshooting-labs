@@ -1,0 +1,19 @@
+# step 1: a local-path volume (the default StorageClass)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: local-data, namespace: t05}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 64Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: local-writer, namespace: t05}
+spec:
+  containers:
+    - name: w
+      image: docker.io/library/busybox:1.37
+      command: [sh, -c, 'while true; do date >> /data/log; sleep 10; done']
+      volumeMounts: [{name: data, mountPath: /data}]
+  volumes:
+    - {name: data, persistentVolumeClaim: {claimName: local-data}}

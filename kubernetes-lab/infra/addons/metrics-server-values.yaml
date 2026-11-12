@@ -1,0 +1,3 @@
+# metrics-server with the chart's defaults: kubelets have real serving certs (serverTLSBootstrap), so no
+# --kubelet-insecure-tls. (This file exists so the image list and the install use the same values.)
+{}

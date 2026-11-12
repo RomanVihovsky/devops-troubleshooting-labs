@@ -1,0 +1,2 @@
+fullnameOverride: web
+replicaCount: 2

@@ -1,0 +1,1 @@
+kx -n store patch ingress store --type json -p '[{"op":"add","path":"/spec/rules/-","value":{"host":"www.store.lab","http":{"paths":[{"path":"/","pathType":"Prefix","backend":{"service":{"name":"store","port":{"number":8080}}}}]}}}]' >/dev/null

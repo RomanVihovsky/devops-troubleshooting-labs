@@ -1,0 +1,9 @@
+id: P13
+title: '`kubectl delete pod` hangs - the pod stays Terminating'
+kind: incident
+level: 2
+domain: pods
+wave: 2
+est: 20m
+reset: ns
+namespaces: [queue]

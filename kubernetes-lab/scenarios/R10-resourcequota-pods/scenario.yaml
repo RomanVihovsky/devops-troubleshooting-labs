@@ -1,0 +1,9 @@
+id: R10
+title: 'Namespace quota: the new deployment silently has 0 pods'
+kind: incident
+level: 1
+domain: resources
+wave: 2
+est: 10m
+reset: ns
+namespaces: [sandbox]

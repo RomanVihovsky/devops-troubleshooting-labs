@@ -1,0 +1,2 @@
+namespace: kust-dev
+resources: [../../base]

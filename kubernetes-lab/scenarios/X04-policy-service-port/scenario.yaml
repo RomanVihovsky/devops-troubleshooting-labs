@@ -1,0 +1,9 @@
+id: X04
+title: The policy allows port 80, the connection is still blocked
+kind: incident
+level: 2
+domain: network
+wave: 2
+est: 10m
+reset: ns
+namespaces: [portx]

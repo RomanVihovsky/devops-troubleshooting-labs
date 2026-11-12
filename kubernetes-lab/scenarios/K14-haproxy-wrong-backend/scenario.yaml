@@ -1,0 +1,9 @@
+id: K14
+title: kubectl from the desktop fails, workers go NotReady one by one - fine on k8s-cp1
+kind: incident
+level: 2
+domain: control-plane
+wave: 2
+est: 15m
+reset: cluster
+namespaces: []

@@ -1,0 +1,10 @@
+id: N06
+title: Nothing resolves cluster-wide, CoreDNS CrashLoopBackOff
+kind: incident
+level: 2
+domain: services
+wave: 1
+est: 15m
+reset: cluster
+namespaces: []
+gitops: false

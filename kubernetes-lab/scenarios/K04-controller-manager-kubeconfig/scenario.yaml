@@ -1,0 +1,10 @@
+id: K04
+title: Deployments create no pods - scaling does nothing
+kind: incident
+level: 2
+domain: control-plane
+wave: 1
+est: 15m
+reset: cluster
+namespaces: [ops]
+gitops: false

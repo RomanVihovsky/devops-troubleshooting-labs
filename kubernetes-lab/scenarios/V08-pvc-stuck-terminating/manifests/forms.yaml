@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: forms-data-v2, namespace: forms}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 64Mi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: forms, namespace: forms}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: forms}}
+  template:
+    metadata: {labels: {app: forms}}
+    spec:
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: forms}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: forms-data-v2}}]

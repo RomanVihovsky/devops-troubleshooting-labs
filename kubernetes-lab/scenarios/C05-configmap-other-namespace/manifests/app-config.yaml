@@ -1,0 +1,8 @@
+# checkout's settings - from the runbook
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  GREETING: Hej
+  APP_NAME: checkout

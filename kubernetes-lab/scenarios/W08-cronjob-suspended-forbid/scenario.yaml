@@ -1,0 +1,9 @@
+id: W08
+title: The nightly CronJob didn't run
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 15m
+reset: ns
+namespaces: [cron]

@@ -1,0 +1,9 @@
+id: T14
+title: SOPS + age - encrypt in Git, a second recipient, updatekeys, no plaintext in history
+kind: learn
+level: 2
+domain: secrets
+est: 30m
+reset: ns
+namespaces: []
+gitops: true

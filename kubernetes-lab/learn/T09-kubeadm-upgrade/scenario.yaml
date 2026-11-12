@@ -1,0 +1,9 @@
+id: T09
+title: kubeadm upgrade - 1.36 to 1.37, control plane first, then node by node
+kind: learn
+level: 2
+domain: control-plane
+est: 45m
+reset: cluster
+namespaces: []
+gitops: false

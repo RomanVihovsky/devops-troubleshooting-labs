@@ -1,0 +1,3 @@
+# T10 answers
+release_secrets:      # how many release Secrets does Helm keep for "web" now?
+chart_version:        # the chart version recorded in a release Secret

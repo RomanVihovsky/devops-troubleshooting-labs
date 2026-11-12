@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: profile, namespace: profile}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: profile}}
+  template:
+    metadata: {labels: {app: profile}}
+    spec:
+      containers:
+        - name: profile
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: profile}]
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /ready, port: http}, periodSeconds: 3}
+          livenessProbe: {httpGet: {path: /health, port: 8081}, periodSeconds: 10, failureThreshold: 3}

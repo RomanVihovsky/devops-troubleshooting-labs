@@ -1,0 +1,3 @@
+# Q05 - what fails at edge
+path:           # the failing request path, e.g. /something
+error:          # (part of) the error message the app logs for it

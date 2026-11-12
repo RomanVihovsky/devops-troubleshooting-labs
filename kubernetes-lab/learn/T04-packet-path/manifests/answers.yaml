@@ -1,0 +1,7 @@
+# T04 answers - ./lab verify compares them with the live state
+web_node:           # the node that runs the web pod
+svc_chain:          # KUBE-SVC-... chain of t04/web (iptables on k8s-w1)
+dnat_target:        # ip:port the KUBE-SEP chain DNATs to
+vxlan_mtu:          # MTU of vxlan.calico on k8s-w1
+vxlan_port:         # UDP port of the VXLAN tunnel
+vxlan_peer:         # the node IP that k8s-w1 sends the encapsulated packets for the web pod to

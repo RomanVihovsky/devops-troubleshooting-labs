@@ -1,0 +1,10 @@
+id: D11
+title: The new metrics app was merged a day ago - Argo CD doesn't know it exists
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 15m
+reset: ns
+namespaces: [metrics]
+gitops: true

@@ -1,0 +1,12 @@
+id: L01
+title: k8s-w2 NotReady after maintenance
+kind: incident
+level: 1
+domain: nodes
+wave: 1
+pilot: true
+est: 10m
+reset: node
+nodes: [w2]
+namespaces: []
+gitops: false

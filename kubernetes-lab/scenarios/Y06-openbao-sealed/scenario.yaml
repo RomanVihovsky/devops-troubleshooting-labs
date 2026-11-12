@@ -1,0 +1,10 @@
+id: Y06
+title: All ExternalSecrets failing since the gateway maintenance - OpenBao is sealed
+kind: incident
+level: 1
+domain: secrets
+wave: 2
+est: 15m
+reset: ns
+namespaces: []
+openbao: true

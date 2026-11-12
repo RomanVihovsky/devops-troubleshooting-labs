@@ -1,0 +1,10 @@
+id: L10
+title: A pod keeps coming back after every kubectl delete
+kind: incident
+level: 1
+domain: nodes
+wave: 2
+est: 10m
+reset: node
+nodes: [w2]
+namespaces: []

@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: notes, namespace: notes}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: notes}}
+  template:
+    metadata: {labels: {app: notes}}
+    spec:
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: notes}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, emptyDir: {}}]

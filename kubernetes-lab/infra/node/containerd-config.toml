@@ -1,0 +1,16 @@
+# /etc/containerd/config.toml on every k8s node - only what differs from containerd 2.x defaults
+# (see the full result with: containerd config dump)
+version = 3
+
+[plugins.'io.containerd.cri.v1.images']
+  [plugins.'io.containerd.cri.v1.images'.pinned_images]
+    sandbox = 'registry.k8s.io/pause:3.10.2'
+  [plugins.'io.containerd.cri.v1.images'.registry]
+    # per-registry mirrors: /etc/containerd/certs.d/<registry>/hosts.toml -> the lab registry on k8s-gw
+    config_path = '/etc/containerd/certs.d'
+
+[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+  runtime_type = 'io.containerd.runc.v2'
+  [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+    # kubelet uses the systemd cgroup driver (kubeadm default) - they must match
+    SystemdCgroup = true

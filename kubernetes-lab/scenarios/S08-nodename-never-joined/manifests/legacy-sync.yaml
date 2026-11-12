@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: legacy-sync, namespace: legacy}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: legacy-sync}}
+  template:
+    metadata: {labels: {app: legacy-sync}}
+    spec:
+      nodeName: k8s-w4
+      containers:
+        - {name: sync, image: registry.lab:5000/lab/labapp:1.4, env: [{name: APP_NAME, value: legacy-sync}]}

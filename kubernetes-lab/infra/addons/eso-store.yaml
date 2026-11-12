@@ -1,0 +1,24 @@
+# The store every ExternalSecret in the lab uses (charts/labapp and charts/shop default to it)
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: openbao
+spec:
+  provider:
+    vault:
+      server: https://bao.lab:8200
+      path: secret
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: lab-ca
+        key: ca.crt
+        namespace: external-secrets
+      auth:
+        kubernetes:
+          mountPath: kubernetes
+          role: eso
+          serviceAccountRef:
+            name: eso-auth
+            namespace: external-secrets
+            audiences: [openbao]

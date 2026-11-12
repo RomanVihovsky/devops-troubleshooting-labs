@@ -1,0 +1,9 @@
+id: G08
+title: Large uploads fail with 413
+kind: incident
+level: 2
+domain: ingress
+wave: 2
+est: 15m
+reset: ns
+namespaces: [media]

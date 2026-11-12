@@ -1,0 +1,11 @@
+id: N01
+title: Orders frontend can't reach its backend
+kind: incident
+level: 1
+domain: services
+wave: 1
+pilot: true
+est: 10m
+reset: ns
+namespaces: [orders]
+gitops: false

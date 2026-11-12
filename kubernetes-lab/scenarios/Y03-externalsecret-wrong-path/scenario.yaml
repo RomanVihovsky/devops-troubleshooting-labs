@@ -1,0 +1,11 @@
+id: Y03
+title: shop down - ExternalSecret SecretSyncedError after the "secret path cleanup"
+kind: incident
+level: 2
+domain: secrets
+wave: 1
+est: 20m
+reset: ns
+namespaces: []
+gitops: true
+openbao: true

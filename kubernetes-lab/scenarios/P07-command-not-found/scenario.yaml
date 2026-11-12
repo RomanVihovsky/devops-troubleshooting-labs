@@ -1,0 +1,10 @@
+id: P07
+title: RunContainerError - executable file not found
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [reports]
+gitops: false

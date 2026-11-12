@@ -1,0 +1,10 @@
+id: S03
+title: Pending - untolerated taint on every worker
+kind: incident
+level: 1
+domain: scheduling
+wave: 1
+est: 10m
+reset: ns
+namespaces: [etl]
+gitops: false

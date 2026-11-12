@@ -1,0 +1,5 @@
+# Q04 - reconstruct the incident (./lab verify compares with the cluster)
+bad_image:          # the image that broke api (full reference)
+last_good_image:    # the last image that ran fine
+missing_setting:    # the setting the broken version says is missing
+exit_code:          # the failing container's exit code

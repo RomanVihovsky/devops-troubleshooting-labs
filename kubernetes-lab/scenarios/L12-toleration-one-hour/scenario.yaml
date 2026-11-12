@@ -1,0 +1,11 @@
+id: L12
+title: A node died and its pods took over an hour to move
+kind: incident
+level: 2
+domain: nodes
+wave: 1
+est: 20m
+reset: node
+nodes: [w2]
+namespaces: [checkout]
+gitops: false

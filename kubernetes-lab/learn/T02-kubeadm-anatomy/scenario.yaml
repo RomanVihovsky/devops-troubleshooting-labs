@@ -1,0 +1,9 @@
+id: T02
+title: kubeadm anatomy - static pods, PKI, kubelet config, kubeadm-config
+kind: learn
+level: 1
+domain: control-plane
+est: 30m
+reset: ns
+namespaces: []
+gitops: false

@@ -1,0 +1,11 @@
+id: L06
+title: kubectl logs/exec fail for pods on one node, the pods run fine
+kind: incident
+level: 3
+domain: nodes
+wave: 1
+est: 25m
+reset: node
+nodes: [w2]
+namespaces: []
+gitops: false

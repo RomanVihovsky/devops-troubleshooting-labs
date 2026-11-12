@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: search-cache, namespace: search-cache}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: search-cache}}
+  template:
+    metadata: {labels: {app: search-cache}}
+    spec:
+      containers:
+        - name: cache
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: search-cache}
+            - {name: CACHE_MB, value: "192"}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 128Mi}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

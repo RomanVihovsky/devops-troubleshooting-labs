@@ -1,0 +1,9 @@
+id: O02
+title: Can't delete a custom resource - kubectl delete hangs
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 10m
+reset: ns
+namespaces: [dbs]

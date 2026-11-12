@@ -1,0 +1,9 @@
+id: O07
+title: Drain a worker that runs local data, DaemonSets and a bare pod
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [maint]

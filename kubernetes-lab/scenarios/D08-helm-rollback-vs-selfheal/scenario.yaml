@@ -1,0 +1,10 @@
+id: D08
+title: helm rollback "worked for a minute" - ledger broke again
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 20m
+reset: ns
+namespaces: [ledger]
+gitops: true

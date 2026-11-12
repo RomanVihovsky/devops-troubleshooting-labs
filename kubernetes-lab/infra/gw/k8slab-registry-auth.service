@@ -1,0 +1,13 @@
+[Unit]
+Description=kubernetes-lab private registry (distribution, read-only, htpasswd) on :5001
+After=network-online.target k8slab-registry.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/registry serve /etc/k8slab/registry-auth.yml
+Restart=always
+RestartSec=3
+User=k8slab-registry
+
+[Install]
+WantedBy=multi-user.target

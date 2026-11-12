@@ -1,0 +1,9 @@
+id: Y05
+title: ClusterSecretStore not Ready - "x509: certificate signed by unknown authority"
+kind: incident
+level: 2
+domain: secrets
+wave: 2
+est: 15m
+reset: ns
+namespaces: []

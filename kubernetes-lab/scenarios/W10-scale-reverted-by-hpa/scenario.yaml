@@ -1,0 +1,9 @@
+id: W10
+title: '`kubectl scale --replicas=2` keeps reverting to 5'
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 10m
+reset: ns
+namespaces: [api]

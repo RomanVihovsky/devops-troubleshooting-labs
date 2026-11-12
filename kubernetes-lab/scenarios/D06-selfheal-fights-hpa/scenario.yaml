@@ -1,0 +1,10 @@
+id: D06
+title: demo flips OutOfSync every minute - self-heal fights the HPA
+kind: incident
+level: 2
+domain: delivery
+wave: 2
+est: 20m
+reset: ns
+namespaces: []
+gitops: true

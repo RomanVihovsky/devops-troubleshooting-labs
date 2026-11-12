@@ -1,0 +1,9 @@
+id: K17
+title: 'x509: certificate is valid for ..., not 192.168.56.20 - from every desktop'
+kind: incident
+level: 2
+domain: control-plane
+wave: 2
+est: 25m
+reset: cluster
+namespaces: []

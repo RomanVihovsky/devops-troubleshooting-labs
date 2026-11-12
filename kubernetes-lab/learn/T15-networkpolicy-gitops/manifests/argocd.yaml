@@ -1,0 +1,1 @@
+# step 4 - TODO: egress for every pod in argocd: DNS, the argocd namespace itself, the Kubernetes API, Gitea

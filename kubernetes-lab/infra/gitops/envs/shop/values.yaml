@@ -1,0 +1,9 @@
+# shop: frontend (shop.lab) -> api -> postgres + redis. The shared Secret shop-secrets comes from OpenBao
+# (secret/shop) through the ClusterSecretStore "openbao".
+secret:
+  source: externalSecret
+  externalSecret:
+    refreshInterval: 1m
+frontend:
+  ingress:
+    enabled: true

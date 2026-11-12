@@ -1,0 +1,9 @@
+id: V07
+title: The PVC resize is rejected - "storageclass ... does not support resize"
+kind: incident
+level: 2
+domain: storage
+wave: 2
+est: 15m
+reset: ns
+namespaces: [archive]

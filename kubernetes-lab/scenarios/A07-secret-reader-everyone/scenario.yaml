@@ -1,0 +1,9 @@
+id: A07
+title: 'Security audit: who can read Secrets? Everyone.'
+kind: incident
+level: 2
+domain: security
+wave: 2
+est: 15m
+reset: ns
+namespaces: [backup]

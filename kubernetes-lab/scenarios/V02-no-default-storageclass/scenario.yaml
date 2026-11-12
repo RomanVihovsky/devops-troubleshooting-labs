@@ -1,0 +1,10 @@
+id: V02
+title: PVC Pending - no persistent volumes available and no storage class is set
+kind: incident
+level: 2
+domain: storage
+wave: 1
+est: 10m
+reset: ns
+namespaces: [wiki]
+gitops: false

@@ -1,0 +1,7 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: frontdoor, namespace: web-front}
+spec:
+  parentRefs: [{name: traefik-gateway, namespace: traefik}]
+  hostnames: [frontdoor.lab]
+  rules: [{backendRefs: [{name: api, namespace: web-back, port: 8080}]}]

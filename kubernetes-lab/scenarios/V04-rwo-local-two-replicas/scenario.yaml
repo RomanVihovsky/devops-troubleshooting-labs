@@ -1,0 +1,10 @@
+id: V04
+title: Second replica Pending - volume node affinity conflict
+kind: incident
+level: 2
+domain: storage
+wave: 1
+est: 20m
+reset: ns
+namespaces: [thumbs]
+gitops: false

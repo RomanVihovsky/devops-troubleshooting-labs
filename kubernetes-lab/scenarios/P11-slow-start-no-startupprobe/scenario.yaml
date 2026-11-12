@@ -1,0 +1,10 @@
+id: P11
+title: Pods never get past startup on the big dataset
+kind: incident
+level: 2
+domain: pods
+wave: 1
+est: 15m
+reset: ns
+namespaces: [analytics]
+gitops: false

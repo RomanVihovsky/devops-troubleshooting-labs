@@ -1,0 +1,10 @@
+id: A02
+title: Dev can get pods but not kubectl exec
+kind: incident
+level: 2
+domain: security
+wave: 1
+est: 10m
+reset: ns
+namespaces: [team-blue]
+gitops: false

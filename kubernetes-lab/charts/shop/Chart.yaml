@@ -1,0 +1,26 @@
+apiVersion: v2
+name: shop
+description: kubernetes-lab umbrella - frontend + api (labapp), redis, postgres; offline (file:// + vendored subcharts)
+type: application
+version: 0.1.0
+appVersion: "1.4"
+keywords: [kubernetes-lab, umbrella]
+# Offline by design: labapp comes from the sibling chart (helm dependency build packs it into charts/,
+# Argo CD does that by itself); redis and postgres are vendored directories under charts/.
+dependencies:
+  - name: labapp
+    alias: frontend
+    version: 0.1.0
+    repository: file://../labapp
+    condition: frontend.enabled
+  - name: labapp
+    alias: api
+    version: 0.1.0
+    repository: file://../labapp
+    condition: api.enabled
+  - name: redis
+    version: 0.1.0
+    condition: redis.enabled
+  - name: postgres
+    version: 0.1.0
+    condition: postgres.enabled

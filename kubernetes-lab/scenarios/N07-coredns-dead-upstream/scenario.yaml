@@ -1,0 +1,10 @@
+id: N07
+title: Internal names resolve, external ones don't
+kind: incident
+level: 2
+domain: services
+wave: 1
+est: 15m
+reset: cluster
+namespaces: []
+gitops: false

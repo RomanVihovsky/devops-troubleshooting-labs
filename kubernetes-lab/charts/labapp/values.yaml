@@ -1,0 +1,268 @@
+# labapp chart. Every `app.*` value is one labapp setting (env var) - see apps/labapp/README.md.
+# Non-secret settings land in the <fullname> ConfigMap (envFrom); secrets come from one Secret.
+
+nameOverride: ""
+fullnameOverride: ""
+# app.kubernetes.io/component label (frontend, api, ...)
+component: ""
+
+image:
+  repository: registry.lab:5000/lab/labapp
+  tag: "1.4"                          # empty = .Chart.AppVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 2                       # not rendered when autoscaling.enabled (the HPA owns replicas)
+revisionHistoryLimit: 5
+strategy: {}                          # e.g. {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+
+app:
+  name: ""                            # APP_NAME (default: the release fullname)
+  port: 8080                          # PORT, also the containerPort "http"
+  bindAddress: ""                     # BIND_ADDRESS (labapp default 0.0.0.0)
+  greeting: ""                        # GREETING
+  basePath: ""                        # BASE_PATH
+  allowedHosts: []                    # ALLOWED_HOSTS
+  requiredEnv: []                     # REQUIRED_ENV
+  logLevel: info                      # LOG_LEVEL
+  logFormat: text                     # LOG_FORMAT (text|json)
+  logFile: ""                         # LOG_FILE; its directory gets an emptyDir named "logs"
+  warmupSeconds: 0                    # WARMUP_SECONDS
+  cacheMB: 0                          # CACHE_MB
+  cacheWarmup: eager                  # CACHE_WARMUP (eager|lazy)
+  diskCacheMB: 0                      # DISK_CACHE_MB
+  workerThreads: 16                   # WORKER_THREADS
+  indexerWorkers: 0                   # INDEXER_WORKERS
+  hashIterations: 0                   # HASH_ITERATIONS
+  maxUploadMB: 64                     # MAX_UPLOAD_MB
+  errorRate: 0                        # ERROR_RATE
+  maintenanceFile: ""                 # MAINTENANCE_FILE
+  shutdown:
+    mode: graceful                    # SHUTDOWN_MODE (graceful|immediate|ignore)
+    delaySeconds: 0                   # SHUTDOWN_DELAY_SECONDS
+    timeoutSeconds: 25                # SHUTDOWN_TIMEOUT_SECONDS
+  storage: memory                     # STORAGE_BACKEND (memory|redis|postgres)
+  autoMigrate: false                  # AUTO_MIGRATE
+  readyCheckDependencies: true        # READY_CHECK_DEPENDENCIES
+  healthCheckDependencies: false      # HEALTH_CHECK_DEPENDENCIES
+  redis:
+    host: ""                          # REDIS_HOST (empty = no redis); password via secrets.env.REDIS_PASSWORD
+    port: 6379                        # REDIS_PORT
+    db: 0                             # REDIS_DB
+    username: ""                      # REDIS_USERNAME
+  database:
+    url: ""                           # DATABASE_URL without the password (put a full URL in the Secret instead
+                                      # via secrets.env.DATABASE_URL, or the password via DATABASE_PASSWORD)
+  upstream:
+    url: ""                           # UPSTREAM_URL; token via secrets.env.UPSTREAM_TOKEN
+    host: ""                          # UPSTREAM_HOST
+    required: false                   # UPSTREAM_REQUIRED
+    timeoutSeconds: 3                 # UPSTREAM_TIMEOUT_SECONDS
+  peers:
+    discovery: none                   # PEER_DISCOVERY (none|dns|kubernetes); dns renders the headless Service,
+                                      # kubernetes renders a pod-reader Role (rbac.create)
+    service: ""                       # PEER_SERVICE (default: <fullname>-headless)
+    selector: ""                      # PEER_SELECTOR (default: this release's selector labels)
+  credentialsSecret: ""               # CREDENTIALS_SECRET: read this Secret via the Kubernetes API (needs RBAC
+                                      # get secrets - rbac.create renders a resourceNames-scoped Role)
+  downwardAPI: true                   # POD_NAME, POD_NAMESPACE, POD_IP, NODE_NAME
+  settings: {}                        # any other labapp setting, overrides the above: {ERROR_RATE: "0.1"}
+  extraEnv: []                        # raw container env entries, appended last (win over everything)
+  envFrom: []                         # extra envFrom sources
+
+config:
+  rollOnChange: true                  # checksum/config (+ checksum/secret for a SealedSecret) pod annotations:
+                                      # changes in Git roll the pods. An ExternalSecret's value changes outside
+                                      # Git - use secrets.mountAsFiles so labapp re-reads it instead
+  file:                               # optional CONFIG_FILE from the <fullname>-files ConfigMap
+    enabled: false
+    mountPath: /etc/labapp
+    name: app.conf
+    subPath: false                    # true = mount the single file with subPath (it never updates)
+    content: |
+      # re-read by labapp on every request; shown in /config
+      greeting = Hello
+
+secrets:
+  source: none                        # none | existingSecret | sealedSecret | externalSecret
+  name: ""                            # the Secret's name (default: <fullname>)
+  env: {}                             # labapp setting -> key in the Secret, one secretKeyRef each:
+  #   REDIS_PASSWORD: redis-password
+  #   DATABASE_URL: database-url
+  #   UPSTREAM_TOKEN: api-token
+  #   AUTH_TOKEN: api-token
+  mountAsFiles: false                 # mount the Secret and set <SETTING>_FILE instead (rotation without restart)
+  mountPath: /etc/labapp/secrets
+  sealedSecret:
+    encryptedData: {}                 # key -> ciphertext from kubeseal, passed through as-is
+    scope: strict                     # strict | namespace-wide | cluster-wide (must match how it was sealed)
+    type: Opaque
+    labels: {}
+    annotations: {}
+  externalSecret:
+    apiVersion: external-secrets.io/v1
+    storeRef:
+      kind: ClusterSecretStore
+      name: openbao
+    refreshInterval: 1h
+    remoteKey: ""                     # default path in the store (kv-v2), e.g. labapp/demo
+    data: {}                          # Secret key -> property under remoteKey, or {key: path, property: p}:
+    #   redis-password: redis_password
+    #   api-token: {key: shared/tokens, property: api}
+    dataFrom: []                      # raw ESO dataFrom entries
+    creationPolicy: Owner             # Owner | Merge | Orphan | None
+    template: {}                      # raw ESO target.template
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: http
+  nodePort: null
+  externalTrafficPolicy: ""           # Cluster | Local (NodePort/LoadBalancer only)
+  annotations: {}
+
+headless:
+  enabled: false                      # <fullname>-headless (clusterIP: None); forced on by peers.discovery=dns
+  publishNotReadyAddresses: false
+
+ingress:
+  enabled: false
+  className: traefik
+  annotations: {}
+  hosts:
+    - host: labapp.lab
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []                             # [{secretName: labapp-tls, hosts: [labapp.lab]}]
+
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - labapp.lab
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountToken: true                # automountServiceAccountToken on the ServiceAccount
+
+rbac:
+  create: true                        # Roles + RoleBindings: list pods (app.peers.discovery=kubernetes),
+                                      # get the one Secret named by app.credentialsSecret
+
+probes:
+  port: http
+  scheme: HTTP
+  liveness:
+    enabled: true
+    path: /health
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: /ready
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  startup:
+    enabled: false
+    path: /health
+    periodSeconds: 5
+    failureThreshold: 30
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+tmpVolume:
+  enabled: true                       # emptyDir at /tmp (labapp WORK_DIR) - needed with a read-only rootfs
+  sizeLimit: 256Mi
+
+persistence:
+  enabled: false                      # PVC at mountPath, DATA_DIR points there
+  mountPath: /data
+  existingClaim: ""
+  storageClass: ""                    # "" = cluster default, "-" = storageClassName: ""
+  accessModes: [ReadWriteOnce]
+  size: 1Gi
+  annotations: {}                     # e.g. helm.sh/resource-policy: keep
+
+migrations:
+  enabled: false                      # labapp migrate as a Helm hook Job (Argo CD: PostSync)
+  name: ""                            # Job name (default: <fullname>-migrate)
+  hook: post-install,post-upgrade     # a pre-* hook runs before this chart's ConfigMap/Secret exist
+  hookWeight: "0"
+  deletePolicy: before-hook-creation,hook-succeeded
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  command: [labapp, migrate]
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: null
+  behavior: {}
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: null                # set this and minAvailable: null to use maxUnavailable
+
+networkPolicy:
+  enabled: false
+  ingress:
+    allowSameNamespace: true
+    ingressControllerNamespace: traefik   # "" = don't allow the ingress controller
+    from: []                              # extra NetworkPolicyPeer entries
+  egress:
+    restrict: false                       # true = only DNS + egress.to are allowed out
+    dnsNamespace: kube-system
+    to: []                                # extra NetworkPolicyEgressRule entries
+
+command: []                           # override the image entrypoint (labapp)
+args: []                              # e.g. [serve, --bind, 127.0.0.1]
+lifecycle: {}                         # e.g. {preStop: {exec: {command: [sleep, "5"]}}}
+terminationGracePeriodSeconds: 30
+enableServiceLinks: true
+podLabels: {}
+podAnnotations: {}
+priorityClassName: ""
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+dnsPolicy: ""
+dnsConfig: {}
+initContainers: []
+sidecars: []                          # extra containers in the pod (can mount the "logs" volume)
+extraVolumes: []
+extraVolumeMounts: []

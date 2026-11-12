@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+  namespace: argocd
+spec:
+  project: lab
+  source:
+    repoURL: http://git.lab:3000/lab/gitops.git
+    targetRevision: main
+    path: charts/shop
+    helm:
+      releaseName: shop
+      valueFiles: [../../envs/shop/values.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shop
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]

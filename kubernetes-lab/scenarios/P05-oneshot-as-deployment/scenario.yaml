@@ -1,0 +1,9 @@
+id: P05
+title: 'CrashLoopBackOff, but the logs say "done" and the exit code is 0'
+kind: incident
+level: 2
+domain: pods
+wave: 2
+est: 15m
+reset: ns
+namespaces: [orders]

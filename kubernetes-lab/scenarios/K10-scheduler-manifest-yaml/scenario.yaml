@@ -1,0 +1,9 @@
+id: K10
+title: The scheduler "disappeared" - no kube-scheduler pod at all
+kind: incident
+level: 2
+domain: control-plane
+wave: 2
+est: 15m
+reset: cluster
+namespaces: [ops]

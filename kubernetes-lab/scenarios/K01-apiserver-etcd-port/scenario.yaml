@@ -1,0 +1,11 @@
+id: K01
+title: kubectl dead for everyone after the "etcd port audit"
+kind: incident
+level: 2
+domain: control-plane
+wave: 1
+pilot: true
+est: 15m
+reset: cluster
+namespaces: []
+gitops: false

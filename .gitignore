@@ -8,6 +8,8 @@
 /swarm-lab/workspace/
 # ansible-lab: the student working copy (own .git) and CI checkout
 /ansible-lab/workspace/
+# kubernetes-lab: workspace/<ID> "as found" copies (own .git) and the lab/gitops clone
+/kubernetes-lab/workspace/
 
 # Terraform / Terragrunt runtime artefacts (if a lab is run in place)
 # Do NOT ignore *.tfvars or override.tf: the scenarios ship them as fixtures.

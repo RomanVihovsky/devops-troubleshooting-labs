@@ -1,0 +1,12 @@
+# kubeadm JoinConfiguration for k8s-w3 - fill in the TODOs, then on k8s-w3: kubeadm join --config /root/join.yaml
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: k8s-api.lab:6443
+    token: TODO                      # abcdef.0123456789abcdef
+    caCertHashes: [TODO]             # sha256:...
+nodeRegistration:
+  name: k8s-w3
+  criSocket: unix:///run/containerd/containerd.sock
+  # TODO: the kubelet must use the host-only IP, not the NAT NIC's 10.0.2.15

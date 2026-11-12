@@ -1,0 +1,2 @@
+# built by `helm dependency build` from file://../labapp
+charts/*.tgz

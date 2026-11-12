@@ -1,0 +1,10 @@
+id: A12
+title: Job secret-sync forbidden, yet the app mounts the same Secret fine
+kind: incident
+level: 2
+domain: security
+wave: 1
+est: 15m
+reset: ns
+namespaces: [payroll]
+gitops: false

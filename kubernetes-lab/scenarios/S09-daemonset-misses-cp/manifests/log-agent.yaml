@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: log-agent, namespace: logging}
+spec:
+  selector: {matchLabels: {app: log-agent}}
+  template:
+    metadata: {labels: {app: log-agent}}
+    spec:
+      containers:
+        - name: agent
+          image: docker.io/library/busybox:1.37
+          command: [sh, -c, 'while true; do sleep 30; done']
+          resources: {requests: {cpu: 10m, memory: 16Mi}}

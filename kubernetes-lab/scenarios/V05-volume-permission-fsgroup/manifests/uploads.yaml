@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: uploads-data, namespace: uploads}
+spec:
+  storageClassName: nfs
+  accessModes: [ReadWriteMany]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: uploads, namespace: uploads}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: uploads}}
+  template:
+    metadata: {labels: {app: uploads}}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: uploads
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: uploads}
+            - {name: DATA_DIR, value: /data}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: data, mountPath: /data}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: uploads-data}

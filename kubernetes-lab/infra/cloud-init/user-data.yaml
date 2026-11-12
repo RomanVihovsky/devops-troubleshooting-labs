@@ -1,0 +1,32 @@
+#cloud-config
+# kubernetes-lab seed - the same for every VM; the VM's identity comes from its host-only MAC
+# (k8slab-identity + network-config). Built into seed.iso by ./lab vm kit (tools/mkseed.py).
+# Only access is set up here; everything else is provisioned by ./lab over SSH.
+preserve_hostname: true
+manage_etc_hosts: false
+timezone: UTC
+users:
+  - name: lab
+    gecos: kubernetes-lab
+    groups: [sudo, adm, systemd-journal]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - "@@PUBKEY@@"
+ssh_pwauth: false
+disable_root: true
+package_update: false
+package_upgrade: false
+write_files:
+  - path: /etc/k8slab/nodes.csv
+    permissions: "0644"
+    content: |
+@@NODES_CSV@@
+  - path: /usr/local/sbin/k8slab-identity
+    permissions: "0755"
+    content: |
+@@IDENTITY@@
+runcmd:
+  - [/usr/local/sbin/k8slab-identity]
+final_message: "k8slab: cloud-init done after $UPTIME s"

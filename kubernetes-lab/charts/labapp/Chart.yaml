@@ -1,0 +1,7 @@
+apiVersion: v2
+name: labapp
+description: kubernetes-lab demo service (apps/labapp) - every values switch maps to one labapp setting
+type: application
+version: 0.1.0
+appVersion: "1.4"
+keywords: [kubernetes-lab, labapp]

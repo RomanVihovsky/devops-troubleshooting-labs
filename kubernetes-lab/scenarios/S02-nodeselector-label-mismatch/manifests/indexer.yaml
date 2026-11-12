@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: indexer, namespace: indexer}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: indexer}}
+  template:
+    metadata: {labels: {app: indexer}}
+    spec:
+      nodeSelector: {disktype: ssd}
+      containers:
+        - {name: indexer, image: registry.lab:5000/lab/labapp:1.4, env: [{name: APP_NAME, value: indexer}]}

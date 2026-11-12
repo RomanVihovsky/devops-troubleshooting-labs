@@ -1,0 +1,48 @@
+# payroll: the app mounts db-creds; the nightly secret-sync job reads it through the API as SA syncer
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: syncer, namespace: payroll}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: secret-reader, namespace: payroll}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+    resourceNames: [db-cred]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: syncer-secret-reader, namespace: payroll}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: secret-reader}
+subjects: [{kind: ServiceAccount, name: syncer, namespace: payroll}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: app, namespace: payroll}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: app}}
+  template:
+    metadata: {labels: {app: app}}
+    spec:
+      containers:
+        - name: app
+          image: registry.lab:5000/lab/labapp:1.4
+          volumeMounts: [{name: db, mountPath: /etc/db, readOnly: true}]
+      volumes: [{name: db, secret: {secretName: db-creds}}]
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: secret-sync, namespace: payroll}
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      serviceAccountName: syncer
+      restartPolicy: Never
+      containers:
+        - name: sync
+          image: registry.lab:5000/lab/labapp:1.4
+          command: [labapp, read-secret, db-creds]

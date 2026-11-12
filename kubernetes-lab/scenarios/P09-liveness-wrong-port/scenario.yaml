@@ -1,0 +1,10 @@
+id: P09
+title: Healthy app killed every 30 seconds
+kind: incident
+level: 1
+domain: pods
+wave: 1
+est: 10m
+reset: ns
+namespaces: [profile]
+gitops: false

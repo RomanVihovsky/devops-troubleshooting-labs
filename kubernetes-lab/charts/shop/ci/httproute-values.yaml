@@ -1,0 +1,5 @@
+# frontend and api through the Gateway API instead of Ingress
+frontend:
+  httpRoute: {enabled: true}
+api:
+  httpRoute: {enabled: true}

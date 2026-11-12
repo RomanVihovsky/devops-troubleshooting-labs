@@ -1,0 +1,35 @@
+# OpenBao's kubernetes auth: a reviewer SA (TokenReview via system:auth-delegator, long-lived token) and the
+# SA that ESO logs in as (role "eso" in OpenBao is bound to external-secrets/eso-auth).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openbao-reviewer
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openbao-reviewer-auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: openbao-reviewer
+    namespace: kube-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openbao-reviewer-token
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: openbao-reviewer
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-auth
+  namespace: external-secrets

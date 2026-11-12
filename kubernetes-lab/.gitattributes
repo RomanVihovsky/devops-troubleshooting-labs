@@ -1,0 +1,4 @@
+# Windows batch files must keep CRLF line endings (cmd mis-parses labels in LF files)
+*.bat text eol=crlf
+# generated seed ISO (reproducible, see tools/mkseed.py)
+*.iso binary

@@ -1,0 +1,9 @@
+id: Q03
+title: Which pod is the noisy neighbour on k8s-w1?
+kind: incident
+level: 1
+domain: observability
+wave: 2
+est: 10m
+reset: ns
+namespaces: [tenants]

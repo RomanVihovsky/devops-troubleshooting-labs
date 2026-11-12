@@ -1,0 +1,10 @@
+id: Y01
+title: Rotated demo token never arrives - the SealedSecret can't be decrypted
+kind: incident
+level: 2
+domain: secrets
+wave: 1
+est: 20m
+reset: ns
+namespaces: [demo-staging]
+gitops: true

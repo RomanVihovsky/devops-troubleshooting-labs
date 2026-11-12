@@ -1,0 +1,10 @@
+id: S07
+title: Pod Pending forever, no events at all
+kind: incident
+level: 2
+domain: scheduling
+wave: 1
+est: 10m
+reset: ns
+namespaces: [ml]
+gitops: false

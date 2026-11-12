@@ -1,0 +1,9 @@
+id: T06
+title: MetalLB + Ingress + Gateway API - three ways in from outside
+kind: learn
+level: 1
+domain: ingress
+est: 30m
+reset: ns
+namespaces: [t06]
+gitops: false

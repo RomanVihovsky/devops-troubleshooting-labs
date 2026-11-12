@@ -1,0 +1,16 @@
+# step 4: snapshot the shared volume, restore it into a new claim, read it
+# TODO: VolumeSnapshot shared-snap (class nfs) of the claim shared
+---
+# TODO: PersistentVolumeClaim restored (nfs, 64Mi) whose data comes from shared-snap
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: reader, namespace: t05}
+spec:
+  containers:
+    - name: r
+      image: docker.io/library/busybox:1.37
+      command: [sh, -c, 'sleep 86400']
+      volumeMounts: [{name: data, mountPath: /data}]
+  volumes:
+    - {name: data, persistentVolumeClaim: {claimName: restored}}

@@ -1,0 +1,9 @@
+id: Q01
+title: '`kubectl logs` shows nothing - the app "logs a lot"'
+kind: incident
+level: 1
+domain: observability
+wave: 2
+est: 15m
+reset: ns
+namespaces: [billing2]

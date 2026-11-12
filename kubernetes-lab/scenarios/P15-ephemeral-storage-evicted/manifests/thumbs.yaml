@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: thumbs, namespace: thumbs}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: thumbs}}
+  template:
+    metadata: {labels: {app: thumbs}}
+    spec:
+      containers:
+        - name: thumbs
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: thumbs}
+            - {name: DISK_CACHE_MB, value: "300"}
+            - {name: CACHE_DIR, value: /tmp/cache}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi, ephemeral-storage: 50Mi}
+            limits: {memory: 256Mi, ephemeral-storage: 100Mi}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

@@ -1,0 +1,9 @@
+id: G03
+title: '`/api/items` returns 404 from the app behind the Ingress'
+kind: incident
+level: 2
+domain: ingress
+wave: 2
+est: 15m
+reset: ns
+namespaces: [api-gw]

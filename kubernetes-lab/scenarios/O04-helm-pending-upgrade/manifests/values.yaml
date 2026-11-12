@@ -1,0 +1,5 @@
+# today's release of web
+fullnameOverride: web
+replicaCount: 2
+image: {tag: "1.4"}
+app: {greeting: Hallo}

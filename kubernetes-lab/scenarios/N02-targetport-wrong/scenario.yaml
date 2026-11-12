@@ -1,0 +1,10 @@
+id: N02
+title: connection refused via the Service, the pod answers on its IP
+kind: incident
+level: 1
+domain: services
+wave: 1
+est: 10m
+reset: ns
+namespaces: [weather]
+gitops: false

@@ -1,0 +1,9 @@
+id: R01
+title: 'HPA shows <unknown>/60% and never scales'
+kind: incident
+level: 2
+domain: resources
+wave: 2
+est: 15m
+reset: ns
+namespaces: [hpa]

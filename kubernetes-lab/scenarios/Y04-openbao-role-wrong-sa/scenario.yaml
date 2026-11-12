@@ -1,0 +1,10 @@
+id: Y04
+title: ExternalSecrets in prod fail - OpenBao "permission denied"
+kind: incident
+level: 2
+domain: secrets
+wave: 2
+est: 15m
+reset: ns
+namespaces: [prod]
+openbao: true

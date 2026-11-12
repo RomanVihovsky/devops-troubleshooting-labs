@@ -1,0 +1,9 @@
+id: N10
+title: Migrated the database - the app still connects to the old host
+kind: incident
+level: 2
+domain: network
+wave: 2
+est: 20m
+reset: ns
+namespaces: [legacy]
