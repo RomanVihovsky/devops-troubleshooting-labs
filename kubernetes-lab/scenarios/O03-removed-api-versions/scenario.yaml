@@ -1,0 +1,9 @@
+id: O03
+title: 'apply: "no matches for kind PodDisruptionBudget in version policy/v1beta1"'
+kind: incident
+level: 1
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [legacyweb]

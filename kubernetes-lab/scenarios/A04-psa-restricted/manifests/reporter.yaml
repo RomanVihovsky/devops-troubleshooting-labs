@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: reporter, namespace: secure-apps}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: reporter}}
+  template:
+    metadata: {labels: {app: reporter}}
+    spec:
+      containers:
+        - name: reporter
+          image: registry.lab:5000/lab/labapp:1.4
+          securityContext:
+            privileged: true
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

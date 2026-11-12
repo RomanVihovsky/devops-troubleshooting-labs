@@ -1,0 +1,9 @@
+id: O04
+title: '`helm upgrade`: "another operation (install/upgrade/rollback) is in progress"'
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [helmx]

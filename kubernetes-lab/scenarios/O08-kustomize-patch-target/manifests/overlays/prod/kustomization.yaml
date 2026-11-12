@@ -1,0 +1,5 @@
+namespace: kust-prod
+resources: [../../base]
+patches:
+  - path: prod.yaml
+    target: {kind: Deployment, name: webapp}

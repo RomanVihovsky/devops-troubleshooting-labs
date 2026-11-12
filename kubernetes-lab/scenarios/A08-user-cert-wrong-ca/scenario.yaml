@@ -1,0 +1,9 @@
+id: A08
+title: 'New engineer''s kubeconfig: "You must be logged in to the server (Unauthorized)"'
+kind: incident
+level: 2
+domain: security
+wave: 2
+est: 20m
+reset: ns
+namespaces: [dev]

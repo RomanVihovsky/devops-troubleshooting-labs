@@ -1,0 +1,9 @@
+id: O06
+title: Deleted the Deployment - its pods are still running
+kind: incident
+level: 1
+domain: operations
+wave: 2
+est: 10m
+reset: ns
+namespaces: [retired]

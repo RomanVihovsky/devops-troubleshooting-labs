@@ -53,10 +53,11 @@ Companion documents:
 ```
 Windows 11 + VirtualBox 7.2          you run once:  k8slab.bat create   (Linux/macOS: ./k8slab.sh create)
 │  host-only 192.168.56.0/24 (host .1)
-├─ desktop VM (Ubuntu)   ./lab, kubectl, helm, argocd, kubeseal, sops+age, bao, k9s, stern
+├─ desktop VM (Ubuntu)   ./lab, kubectl, helm, argocd, kubeseal, sops+age, bao, stern
 │     ssh lab@192.168.56.x => provisioning, scenarios, resets;  kubectl => https://192.168.56.20:6443
-├─ k8s-gw   .20  haproxy :6443 (k8s-api.lab -> cp1), registry :5000 + htpasswd :5001, Gitea :3000,
-│               OpenBao :8200 (TLS, lab CA), NFS, dnsmasq (*.lab), chrony, apt-cacher-ng
+├─ k8s-gw   .20  haproxy :6443 (k8s-api.lab -> cp1), registry :5000 + read-only htpasswd copy :5001,
+│               nginx :8080 (pinned files + flat apt repo), Gitea :3000, OpenBao :8200 (TLS, lab CA), NFS,
+│               chrony. Docker-free; *.lab names: /etc/hosts on the VMs + a CoreDNS "lab" zone for pods
 ├─ k8s-cp1  .21  kubeadm control plane, stacked etcd
 ├─ k8s-w1 .31 zone-a · k8s-w2 .32 zone-a · k8s-w3 .33 zone-b
 └─ reserved .22/.23 (HA later) · .34 k8s-w4 (spare) · .200-.220 MetalLB pool
@@ -99,10 +100,11 @@ Network decisions:
 ### 2.3 Provisioning and baseline (`./lab`, over SSH)
 
 1. `./lab vm wait`: SSH, identity and cloud-init done on every VM.
-2. `./lab vm provision`: gw first, then the nodes in parallel through gw's apt cache and registry mirror, so
-   internet downloads happen once.
-   - gw: docker-ce, apt-cacher-ng, registry (every pinned image copied once), haproxy, dnsmasq, chrony, NFS,
-     Gitea, OpenBao.
+2. `./lab vm provision`: gw first, then the nodes in parallel through gw's file server, flat apt repo and
+   registry mirror, so the Kubernetes downloads happen once (Ubuntu's own packages still come from the Ubuntu
+   mirror).
+   - gw (no container runtime): nginx file server + flat apt repo, the registry (distribution, every pinned image
+     copied once with crane; a read-only htpasswd copy on :5001), haproxy, chrony, NFS, Gitea, OpenBao.
    - nodes: containerd 2.x, kubeadm/kubelet/kubectl 1.36 and 1.37, crictl, etcdctl, images pre-pulled.
 3. `./lab cluster build --version 1.36`: kubeadm v1beta4 init + joins, Calico, CoreDNS, metrics-server,
    MetalLB L2, Traefik (Ingress + Gateway API), local-path, csi-driver-nfs.

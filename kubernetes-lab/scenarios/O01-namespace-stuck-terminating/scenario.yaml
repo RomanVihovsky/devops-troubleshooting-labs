@@ -1,0 +1,9 @@
+id: O01
+title: Namespace stuck Terminating for days
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [old-team, team-z]

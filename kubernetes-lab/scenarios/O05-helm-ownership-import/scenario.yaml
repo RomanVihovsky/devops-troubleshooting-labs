@@ -1,0 +1,9 @@
+id: O05
+title: '`helm install`: "exists and cannot be imported into the current release"'
+kind: incident
+level: 2
+domain: operations
+wave: 2
+est: 15m
+reset: ns
+namespaces: [importx]
