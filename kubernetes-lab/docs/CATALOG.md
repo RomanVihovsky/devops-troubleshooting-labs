@@ -105,7 +105,7 @@ from inside the cluster.
 | W08 | The nightly CronJob didn't run | 2 | ns | a hung run (`sleep 3600`) blocks `Forbid`; then `suspend: true` | a Job created after setup succeeded; not suspended, schedule + Forbid kept; nothing running > 2 min |
 | W09 | Image updated, nothing happens | 1 | ns | `rollout pause`, then `set image` 1.3 → 1.4 | not paused; 3 Ready all on 1.4 |
 | W10 | `kubectl scale --replicas=2` keeps reverting to 5 | 2 | ns | HPA `minReplicas: 5` owns replicas | one HPA min <= 2, max >= 10; 2 Ready for 60 s |
-| W11 | `rollout undo`: "no rollout history" | 2 | ns | `revisionHistoryLimit: 0` + `Recreate`; 1.3 → 1.5 (crashes) | 3 Ready on 1.3; revisionHistoryLimit >= 2 |
+| W11 | `rollout undo`: "no rollout history", every `/items` fails | 2 | ns | `revisionHistoryLimit: 0`; release 1.3 → 1.4 + `ERROR_RATE=1` rolls out completely (Ready, fails at runtime), so the 1.3 ReplicaSet is pruned | 3 Ready on 1.3, `/items` 200 in every pod; revisionHistoryLimit >= 2 |
 | W12 | `kubectl drain` hangs: PDB violation | 2 | ns | PDB minAvailable 3 = replicas (required anti-affinity, one per worker); setup's drain attempt left w1 cordoned | the w1 pod evicted, w1 schedulable, 3 Ready, PDB still guarantees 2 |
 
 ## N - Services & DNS (14)

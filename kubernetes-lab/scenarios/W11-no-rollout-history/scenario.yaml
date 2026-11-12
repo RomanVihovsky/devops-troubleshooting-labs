@@ -1,0 +1,9 @@
+id: W11
+title: '`kubectl rollout undo`: "no rollout history found"'
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 15m
+reset: ns
+namespaces: [pay]
