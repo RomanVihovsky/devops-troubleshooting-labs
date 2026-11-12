@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: vendor-api, namespace: vendor}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: vendor-api}}
+  template:
+    metadata: {labels: {app: vendor-api}}
+    spec:
+      containers:
+        - name: api
+          image: registry.lab:5001/lab/labapp:1.4
+          imagePullPolicy: Always
+          env: [{name: APP_NAME, value: vendor-api}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

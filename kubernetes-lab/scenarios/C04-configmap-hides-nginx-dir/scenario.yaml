@@ -1,0 +1,9 @@
+id: C04
+title: 'nginx won''t start after adding a config file: mime.types not found'
+kind: incident
+level: 2
+domain: config
+wave: 2
+est: 15m
+reset: ns
+namespaces: [web]

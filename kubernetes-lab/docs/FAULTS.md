@@ -148,6 +148,27 @@ Gotchas:
 - **Probe pods and ReplicaSets**: a policy probe must not carry the labels a ReplicaSet selects (it would be
   adopted). Select with a label the RS doesn't use (X10 uses `app.kubernetes.io/component`), or give the
   workload an extra selector label (X02's `tier: x02`).
+- **Setups run with `pipefail`**: `kx ... | grep -q X` fails whenever kx fails, even when grep matched (K17 waited
+  for an x509 error that `kx` reports by failing). Capture first: `o=$(kx ... 2>&1) || true; grep -q X <<<"$o"`.
+- **Open connections hide faults**: a haproxy `reload` keeps established connections on the old process, and
+  TLS validity is checked only at the handshake. The kubelets' long-lived connections kept working after a bad
+  LB backend (K14) or a clock 400 days back (L16) until something restarted them.
+- **NFS checks groups on the server** (`rpc.mountd --manage-gids` on Ubuntu): `fsGroup` is only a supplementary
+  group, so a pod writes to an NFS volume only if `runAsGroup` (the primary group) matches the directory's group
+  (V05, V07).
+- **`kubectl run --rm -i` can attach late**: a probe pod that finishes fast loses its first lines. Let it `sleep 2`
+  before it prints, and don't require an exact count of lines (W03).
+- **Check state, don't trigger it**: a setup that tests "undo is impossible" by running `rollout undo` repairs the
+  lab if the check runs too early. Use `--dry-run=server` (W11), and wait for the exact state (the 1.5 ReplicaSet,
+  not "one ReplicaSet").
+- **Helm 4 applies server-side**: after a hand patch (`kubectl patch` = field manager `kubectl-patch`), a plain
+  `helm upgrade` fails with a conflict and leaves the release `failed`. `helm_up` passes `--force-conflicts`, so
+  re-applying an add-on from its golden values always wins (R02's cleanup).
+- **A Deployment deletes old ReplicaSets only when a rollout completes.** With a crashing new version the old
+  ReplicaSet stays, whatever `revisionHistoryLimit` says, and `rollout undo` still works. A "no history" lab
+  needs a release that rolls out completely and breaks at runtime (W11).
+- **`maxUnavailable: 25%` of 1 replica rounds down to 0**: a broken new pod never replaces the old one, and the
+  old one keeps serving. A fault in a single-replica add-on needs `strategy: Recreate` (R02).
 - **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
   match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
   the binary for the string when in doubt.

@@ -124,8 +124,10 @@ approve_pending_csrs() {
 }
 
 # ---------------------------------------------------------------- addons ----
-helm_up() {   # release namespace chart-file values-file
-  helm upgrade --install "$1" "$3" -n "$2" --create-namespace -f "$4" --wait --timeout 6m >/dev/null
+# helm_up release namespace chart-file values-file. --force-conflicts: re-applying an add-on wins over fields that
+# a hand patch took over (server-side apply field managers, e.g. "kubectl-patch" after R02)
+helm_up() {
+  helm upgrade --install "$1" "$3" -n "$2" --create-namespace -f "$4" --force-conflicts --wait --timeout 6m >/dev/null
 }
 addon_calico() {
   local f

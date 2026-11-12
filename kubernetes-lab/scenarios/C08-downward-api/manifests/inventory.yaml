@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: inventory, namespace: inventory}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: inventory}}
+  template:
+    metadata: {labels: {app: inventory}}
+    spec:
+      containers:
+        - name: inventory
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIp}}
+            - name: MEMORY_LIMIT_MB
+              valueFrom: {resourceFieldRef: {resource: limits.memory, divisor: 1Mi}}
+          resources: {requests: {cpu: 50m, memory: 64Mi}}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

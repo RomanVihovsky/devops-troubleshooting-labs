@@ -1,0 +1,9 @@
+id: C03
+title: App says "invalid password" - the Secret looks right
+kind: incident
+level: 2
+domain: config
+wave: 2
+est: 15m
+reset: ns
+namespaces: [cart]

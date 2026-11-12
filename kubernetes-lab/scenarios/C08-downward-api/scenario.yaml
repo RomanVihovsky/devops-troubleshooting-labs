@@ -1,0 +1,9 @@
+id: C08
+title: Downward API - the manifest is rejected, then the memory limit is wrong
+kind: incident
+level: 2
+domain: config
+wave: 2
+est: 15m
+reset: ns
+namespaces: [inventory]

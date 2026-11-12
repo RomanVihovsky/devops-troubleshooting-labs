@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: nginx-conf, namespace: web}
+data:
+  nginx.conf: |
+    worker_processes 1;
+    events { worker_connections 256; }
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      server {
+        listen 8080;
+        add_header X-Served-By web-c04 always;
+        location / { return 200 "web c04\n"; }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: web}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: web}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      containers:
+        - name: nginx
+          image: registry.lab:5000/lab/nginx:1.30-alpine
+          ports: [{containerPort: 8080}]
+          volumeMounts:
+            - {name: conf, mountPath: /etc/nginx}
+          readinessProbe: {httpGet: {path: /, port: 8080}, periodSeconds: 3}
+      volumes:
+        - name: conf
+          configMap: {name: nginx-conf}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: web}
+spec: {selector: {app: web}, ports: [{port: 80, targetPort: 8080}]}

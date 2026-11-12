@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: etl, namespace: analytics}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: etl}}
+  template:
+    metadata: {labels: {app: etl}}
+    spec:
+      containers:
+        - name: etl
+          image: registry.lab:5000/lab/labapp:1.6
+          env: [{name: APP_NAME, value: etl}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

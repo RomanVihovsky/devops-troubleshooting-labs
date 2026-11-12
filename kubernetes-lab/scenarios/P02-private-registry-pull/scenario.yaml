@@ -1,0 +1,9 @@
+id: P02
+title: The private image can't be pulled, public ones are fine
+kind: incident
+level: 2
+domain: pods
+wave: 2
+est: 15m
+reset: ns
+namespaces: [vendor, ci]

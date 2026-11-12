@@ -1,0 +1,9 @@
+id: P15
+title: 'Pod Evicted: "ephemeral local storage usage exceeds the total limit"'
+kind: incident
+level: 2
+domain: pods
+wave: 2
+est: 15m
+reset: ns
+namespaces: [thumbs]

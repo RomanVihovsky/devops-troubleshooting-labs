@@ -1,0 +1,9 @@
+id: V05
+title: 'App: "permission denied" writing to its new volume'
+kind: incident
+level: 2
+domain: storage
+wave: 2
+est: 15m
+reset: ns
+namespaces: [uploads]
