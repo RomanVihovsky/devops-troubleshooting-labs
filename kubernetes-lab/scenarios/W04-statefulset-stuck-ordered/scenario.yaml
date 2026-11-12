@@ -1,0 +1,9 @@
+id: W04
+title: StatefulSet stuck at 1/3 replicas
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 15m
+reset: ns
+namespaces: [quorum]

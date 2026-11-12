@@ -1,0 +1,9 @@
+id: W12
+title: '`kubectl drain` hangs: "Cannot evict pod as it would violate the pod''s disruption budget"'
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 20m
+reset: ns
+namespaces: [ha]

@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: log-agent, namespace: logging}
+spec:
+  selector: {matchLabels: {app: log-agent}}
+  template:
+    metadata: {labels: {app: log-agent}}
+    spec:
+      containers:
+        - name: agent
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: log-agent}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}

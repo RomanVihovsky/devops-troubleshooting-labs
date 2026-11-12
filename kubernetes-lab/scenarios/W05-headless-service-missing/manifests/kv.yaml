@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: web, namespace: kv}
+spec:
+  serviceName: web
+  replicas: 3
+  selector: {matchLabels: {app: web}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      containers:
+        - name: member
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: kv}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web-svc, namespace: kv}
+spec: {selector: {app: web}, ports: [{port: 8080}]}

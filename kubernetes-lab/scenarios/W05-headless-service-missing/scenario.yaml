@@ -1,0 +1,9 @@
+id: W05
+title: '`web-0.web` doesn''t resolve'
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 15m
+reset: ns
+namespaces: [kv]

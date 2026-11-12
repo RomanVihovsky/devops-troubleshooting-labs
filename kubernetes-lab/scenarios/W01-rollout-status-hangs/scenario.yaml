@@ -1,0 +1,9 @@
+id: W01
+title: '`kubectl rollout status` hangs forever'
+kind: incident
+level: 1
+domain: workloads
+wave: 2
+est: 10m
+reset: ns
+namespaces: [storefront]

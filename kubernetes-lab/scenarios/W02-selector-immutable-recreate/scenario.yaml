@@ -1,0 +1,9 @@
+id: W02
+title: 'Can''t apply the new manifest: "spec.selector ... field is immutable"'
+kind: incident
+level: 2
+domain: workloads
+wave: 2
+est: 15m
+reset: ns
+namespaces: [search]

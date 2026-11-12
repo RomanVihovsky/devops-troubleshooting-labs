@@ -1,0 +1,9 @@
+id: W06
+title: The log agent DaemonSet is missing on two workers
+kind: incident
+level: 1
+domain: workloads
+wave: 2
+est: 10m
+reset: ns
+namespaces: [logging]

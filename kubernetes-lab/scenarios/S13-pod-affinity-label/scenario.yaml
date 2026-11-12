@@ -1,0 +1,9 @@
+id: S13
+title: 'Pending: session-api wants to sit next to the cache'
+kind: incident
+level: 2
+domain: scheduling
+wave: 2
+est: 10m
+reset: ns
+namespaces: [sessions]
