@@ -1,0 +1,9 @@
+id: X10
+title: 'Argo CD: every app ComparisonError "dial tcp 192.168.56.20:3000: i/o timeout"'
+kind: incident
+level: 2
+domain: network
+wave: 2
+est: 20m
+reset: ns
+namespaces: []

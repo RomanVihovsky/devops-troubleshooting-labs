@@ -1,0 +1,9 @@
+id: G07
+title: Works by the bare name, 404 for www
+kind: incident
+level: 1
+domain: ingress
+wave: 2
+est: 10m
+reset: ns
+namespaces: [store]

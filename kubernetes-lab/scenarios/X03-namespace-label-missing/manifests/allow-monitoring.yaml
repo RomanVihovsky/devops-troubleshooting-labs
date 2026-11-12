@@ -1,0 +1,9 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-monitoring, namespace: appx}
+spec:
+  podSelector: {matchLabels: {app: metrics-api}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {team: monitoring}}}]
+      ports: [{protocol: TCP, port: 8080}]

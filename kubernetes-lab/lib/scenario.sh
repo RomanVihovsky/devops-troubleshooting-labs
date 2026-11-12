@@ -55,10 +55,11 @@ run_lab_script() {
     source "$LAB_DIR/lib/upgrade.sh"; source "$LAB_DIR/lib/golden.sh"; source "$LAB_DIR/lib/gitops.sh"
     source "$LAB_DIR/lib/scenario.sh"
     if [ -f "$STATE_DIR/scenario.env" ]; then set -a; source "$STATE_DIR/scenario.env"; set +a; fi
-    case $- in *e*) trap "lab_err_trap \$? \$LINENO" ERR ;; esac
+    case $- in *e*) set -E; trap "lab_err_trap \$? \$LINENO" ERR ;; esac
     cd "$2" && source "$1"' _ "$script" "$dir"
 }
-# set -e scripts (setup/solve) would otherwise die silently on a failing command that is not `die`
+# set -e scripts (setup/solve) would otherwise die silently on a failing command that is not `die`; -E (errtrace)
+# makes the trap fire inside functions too (Q01 died in http_ok without a word)
 lab_err_trap() { echo "✘ line $2: exit $1: ${BASH_COMMAND:0:160}" >&2; }
 
 # --------------------------------------------------------------- helpers ----

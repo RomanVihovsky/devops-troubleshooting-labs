@@ -1,0 +1,9 @@
+id: G01
+title: The new Ingress returns 404 from the controller
+kind: incident
+level: 1
+domain: ingress
+wave: 2
+est: 10m
+reset: ns
+namespaces: [gallery]

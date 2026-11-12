@@ -1,0 +1,9 @@
+id: X01
+title: After the "zero trust" rollout nothing resolves
+kind: incident
+level: 1
+domain: network
+wave: 2
+est: 15m
+reset: ns
+namespaces: [zt]

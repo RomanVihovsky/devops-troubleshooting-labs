@@ -1,0 +1,9 @@
+id: X02
+title: The frontend can't reach the backend after the new policy
+kind: incident
+level: 1
+domain: network
+wave: 2
+est: 10m
+reset: ns
+namespaces: [shopx]

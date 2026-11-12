@@ -1,0 +1,9 @@
+id: X06
+title: Egress to the external payment API is blocked
+kind: incident
+level: 2
+domain: network
+wave: 2
+est: 15m
+reset: ns
+namespaces: [payx]

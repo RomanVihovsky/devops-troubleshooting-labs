@@ -169,6 +169,9 @@ Gotchas:
   needs a release that rolls out completely and breaks at runtime (W11).
 - **`maxUnavailable: 25%` of 1 replica rounds down to 0**: a broken new pod never replaces the old one, and the
   old one keeps serving. A fault in a single-replica add-on needs `strategy: Recreate` (R02).
+- **jq 1.6 (the desktop's) exits 0 for `-e` on empty input** (jq 1.7 exits 4). `pods_get ... | jq -e '.x'` is "true"
+  when every request timed out and nothing was printed (X01's setup never saw the fault). For output that may be
+  empty, slurp and count: `jq -se 'length > 0 and all(.[]; ...)'`.
 - **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
   match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
   the binary for the string when in doubt.
