@@ -1,0 +1,9 @@
+id: Y02
+title: Every SealedSecret fails to decrypt after the controller was "reset"
+kind: incident
+level: 3
+domain: secrets
+wave: 3
+est: 25m
+reset: cluster
+namespaces: []

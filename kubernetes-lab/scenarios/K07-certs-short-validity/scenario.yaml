@@ -1,0 +1,9 @@
+id: K07
+title: Everything is x509-expired after a quick certificate renewal
+kind: incident
+level: 3
+domain: control-plane
+wave: 3
+est: 35m
+reset: cluster
+namespaces: []

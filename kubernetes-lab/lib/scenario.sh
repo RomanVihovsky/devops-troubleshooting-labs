@@ -247,6 +247,37 @@ coredns_count() {
   done
   echo "$t"
 }
+# audit_enable < policy.yaml: API server audit logging on cp1 (the policy -> /etc/kubernetes/audit/policy.yaml, the
+# log -> /var/log/kubernetes/audit/audit.log, old logs removed), then wait for the API. A `cluster` reset undoes it
+audit_enable() {
+  local pol; pol=$(cat)
+  nxi "$CP" >/dev/null <<__X__
+set -eu
+mkdir -p /etc/kubernetes/audit /var/log/kubernetes/audit
+rm -f /var/log/kubernetes/audit/audit*.log
+cat > /etc/kubernetes/audit/policy.yaml <<'__POLICY__'
+$pol
+__POLICY__
+python3 - <<'PY'
+import yaml
+f = "/etc/kubernetes/manifests/kube-apiserver.yaml"; d = yaml.safe_load(open(f)); c = d["spec"]["containers"][0]
+c["command"] = [a for a in c["command"] if not a.startswith("--audit-")] + [
+    "--audit-policy-file=/etc/kubernetes/audit/policy.yaml", "--audit-log-path=/var/log/kubernetes/audit/audit.log",
+    "--audit-log-maxage=7", "--audit-log-maxbackup=2", "--audit-log-maxsize=50"]
+c["volumeMounts"] = [m for m in c["volumeMounts"] if m["name"] not in ("audit-policy", "audit-log")] + [
+    {"name": "audit-policy", "mountPath": "/etc/kubernetes/audit", "readOnly": True},
+    {"name": "audit-log", "mountPath": "/var/log/kubernetes/audit"}]
+d["spec"]["volumes"] = [v for v in d["spec"]["volumes"] if v["name"] not in ("audit-policy", "audit-log")] + [
+    {"name": "audit-policy", "hostPath": {"path": "/etc/kubernetes/audit", "type": "DirectoryOrCreate"}},
+    {"name": "audit-log", "hostPath": {"path": "/var/log/kubernetes/audit", "type": "DirectoryOrCreate"}}]
+yaml.safe_dump(d, open("/var/tmp/kube-apiserver.yaml", "w"), sort_keys=False)
+PY
+mv /var/tmp/kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml
+__X__
+  sleep 15
+  retry 240 kx get --raw /readyz || return 1
+  retry 60 nx "$CP" 'test -s /var/log/kubernetes/audit/audit.log' </dev/null
+}
 # node_reboot <node> [timeout]: reboot from inside the guest, wait until SSH answers with a new boot id. Not for
 # Ready: a reboot-surfacing fault may keep the node NotReady (L14) - the caller decides what "back" means.
 boot_id() { nx "$1" 'cat /proc/sys/kernel/random/boot_id' </dev/null 2>/dev/null; }

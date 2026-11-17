@@ -121,7 +121,7 @@ Network decisions:
 | ns | ~70% of scenarios | Delete objects/namespaces labelled `lab.scenario=<id>` and the scenario's Argo CD apps; Gitea `baseline` → `main`; restore the OpenBao kv | 5-20 s |
 | node | Node/runtime faults | Push the golden tar; undo nft `lab_fault`, tc, sysctls, swap, modules, SIGSTOP and clock; restart containerd + kubelet | 15-40 s |
 | cluster | Control plane, etcd, certs, gw | Node reset everywhere + `etcdutl snapshot restore` + restart the control plane and kubelets + gw data + `doctor` | 2-3 min |
-| rebuild | Version switch (upgrade scenarios start at 1.36), anything worse | `kubeadm reset` + build + golden | ~10 min |
+| rebuild | Anything worse (`./lab cluster rebuild`). The upgrade scenarios (T09, K13) instead rebuild bare at 1.36 in their setup (`cluster_bare_build`) and use the `cluster` reset | `kubeadm reset` + build + golden | ~10 min |
 | vm (manual) | SSH gone | `k8slab.bat restore baseline`, then `./lab vm wait` | ~3 min |
 
 Faults that would need a hypervisor are done in the guest:

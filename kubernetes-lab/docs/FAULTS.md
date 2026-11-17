@@ -180,6 +180,21 @@ Gotchas:
   restart). An eviction threshold "free + 300Mi", measured once, sometimes evicted nothing, and a bigger margin
   would outlast the victim's ~600 MiB and evict other pods. Measure, set, wait for the eviction, and re-measure
   if none came (R04).
+- **Cluster-scoped objects the student re-applies lose the lab label**: a PriorityClass, a CRD, an IPPool or a
+  StorageClass applied from a workspace file without the label survives the label sweep. Delete them by name in
+  `cleanup.sh` (S10, O11, X08, D12) - remember `cleanup.sh` is skipped at reset level `cluster`.
+- **Count live pods, not `phase=Running`**: during a rollout the old pods are still Running while terminating.
+  Filter `metadata.deletionTimestamp == null` (S05, A10).
+- **Server-side apply after `--force-conflicts`**: the old manager loses the value but may keep co-owning a list
+  item's key (`f:name`) - check `f:value`, not the whole `f:env` (O10).
+- **Calico autodetection on these VMs**: `first-found` picks the host-only NIC; `can-reach=<internet IP>` follows the
+  default route to the NAT NIC (`10.0.2.15`, the same on every VM) (X07). IPPools are CRD-only
+  (`crd.projectcalico.org/v1`, no defaulting); exhaustion says *No IPs available in pools* (X08).
+- **etcd NOSPACE**: after raising the quota, wait for the **new** etcd process before `alarm disarm` - the old one
+  re-raises the alarm at once (K11).
+- **`pkill -f` matches its own shell** when the pattern appears in the command line: use pid files (`outage_probe`).
+- **Rolling updates and topology spread**: without `matchLabelKeys: [pod-template-hash]` the new ReplicaSet spreads
+  around the old pods and can end up uneven (S05).
 - **jq 1.6 (the desktop's) exits 0 for `-e` on empty input** (jq 1.7 exits 4). `pods_get ... | jq -e '.x'` is "true"
   when every request timed out and nothing was printed (X01's setup never saw the fault). For output that may be
   empty, slurp and count: `jq -se 'length > 0 and all(.[]; ...)'`.

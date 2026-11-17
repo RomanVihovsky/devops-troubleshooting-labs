@@ -1,0 +1,4 @@
+# Who deleted ConfigMap checkout/feature-flags? (from the API server's audit log)
+user:            # the username
+deleted_at:      # UTC, HH:MM
+client:          # the first word of the user agent, e.g. kubectl, helm, argocd-application-controller

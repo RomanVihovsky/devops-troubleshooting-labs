@@ -1,0 +1,9 @@
+id: X07
+title: k8s-w3's pods lost all cross-node traffic after a calico-node restart
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 30m
+reset: cluster
+namespaces: [meshcheck]

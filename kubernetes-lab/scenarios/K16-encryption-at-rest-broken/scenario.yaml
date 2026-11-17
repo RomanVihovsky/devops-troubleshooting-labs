@@ -1,0 +1,9 @@
+id: K16
+title: The API server won't start after enabling encryption at rest
+kind: incident
+level: 3
+domain: control-plane
+wave: 3
+est: 30m
+reset: cluster
+namespaces: []
