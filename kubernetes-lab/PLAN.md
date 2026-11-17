@@ -161,7 +161,7 @@ interview, status.
 | `./lab vm` (built) | `check`, `kit`, `seedtest`, `wait`, `status`, `soak [min]`; `./lab node <n>` |
 | `./lab vm` (Phase 1) | `provision` |
 | `./lab cluster` (Phase 1) | `build`, `golden`, `reset`, `rebuild`, `doctor` |
-| Other commands | `./lab env` (PATH = `cache/bin`, KUBECONFIG), `./lab ui`, `./lab chaos`, `./lab exam` |
+| Other commands | `./lab env` (PATH = `cache/bin`, KUBECONFIG), `./lab ui`; practice modes (Phase 7): `./lab interview [n] [min]`, `./lab exam start [min]` (CKA style, 8 domain groups, 66 %), `./lab chaos start [level]` (no ticket) - `lib/modes.sh` |
 | Scenario helpers | `kx` (local kubectl), `nx <node> '<cmd>'` (root on a node), `nssh`, `gx` (Gitea), `bx` (bao), `fault_partition`, `fault_clear`, `wait_rollout`, `incluster_curl`, `can_i`, `argo_status`, `curl_matrix` |
 
 Scenario layout:

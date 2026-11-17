@@ -9,7 +9,8 @@ operators observe), never the keystrokes. `solve.sh` is the reference fix that `
 
 ```
 scenarios/<ID>-kebab/            (learn/T..-kebab/ for the learn track: same files, kind: learn)
-  scenario.yaml   id, title, kind, level (1-3), domain, wave, est, reset, namespaces, nodes, gitops, [openbao, pilot]
+  scenario.yaml   id, title, kind, level (1-3), domain, wave, est, reset, namespaces, nodes, gitops, [openbao, pilot,
+                  timed: false = not picked by interview / exam / chaos, e.g. a long rebuild]
   ticket.md       "# Title", the incident as the reporter sees it, and a **Test**: line (what verify checks)
   hints.md        3 x "## Hint n": where to look -> what's wrong -> how to fix
   manifests/      optional: copied to workspace/<ID>/ ("as found", ./lab diff shows the student's changes)
@@ -24,6 +25,9 @@ scenarios/<ID>-kebab/            (learn/T..-kebab/ for the learn track: same fil
 The scripts run on the desktop VM, from `workspace/<ID>/`, with `lib/{common,vm,cluster,gitops,golden,scenario}.sh`
 loaded. `$SCN` is the scenario directory and `$LAB_ID` its ID. During `verify`, every API request has a 10 s
 timeout (`KX_TIMEOUT`), so a dead API fails a check instead of hanging it.
+
+Tickets refer to `workspace/<ID>/...`: when a lab is hidden (`./lab start random`, interview, exam, chaos) the
+ticket shows `workspace/current/...`, a symlink to the same directory, and no command prints the ID.
 
 ## Reset levels - pick the cheapest one that undoes *everything* setup and the student may change
 
@@ -91,6 +95,9 @@ escalates to a full `cluster reset` by itself.
 | `https_out host [path]` | HTTPS status from the desktop through the LB (443), the cert verified against the lab CA for `host`; `000` = TLS failed (Traefik's default cert, wrong name) |
 | `load_test ns url [-c N -d S --rps N]` | `labapp load` from a throwaway pod: JSON `{requests, errors, codes, rps, p50_ms, p90_ms, p99_ms}` (`{}` if the pod failed). Runs without the 10 s API timeout of verify |
 | `node_reboot node [s]` | reboot from inside the guest, wait for a new boot id over SSH. Not for Ready: the caller decides what "back" means |
+| `ns_matrix ns selector [port]` | every Running labapp pod reaches every other one by pod IP (`labapp get /health`); failing pairs on stderr as `node -> node (ip)` (N12, X07) |
+| `outage_probe start name url [host]` / `gaps name` / `stop name` | a prober on gw, a request every 0.5 s for at most 1 h; `gaps` = the failed probes. gw is never drained, so it watches a rollout or an upgrade from outside (P16, K13). Stop it in `cleanup.sh` |
+| `coredns_count [rcode]` | DNS requests (or `NXDOMAIN` etc. responses) summed over the CoreDNS pods' `:9153` metrics; compare before/after (N08) |
 | `user_kubeconfig user group[,group] file` | a client cert from the cluster CA through the CSR API (CSR `lab-<user>`, labelled) + a kubeconfig that uses it |
 | `registry_ci_password` / `private_registry_ok` | the private registry `registry.lab:5001` (same images, read-only, user `ci`): its password / "401 anonymous, ci can read" |
 | `gitea_argocd_user` / `argo_repo_secret` | Argo CD's Gitea account (password back to `.state/gitea/argocd-password`) / its repo Secret |

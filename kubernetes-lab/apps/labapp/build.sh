@@ -22,3 +22,4 @@ build 1.3      APP_VERSION=1.3                              # previous release (
 build 1.5      APP_VERSION=1.5 REQUIRED_ENV=SESSION_SECRET  # broken release: crashloops
 build 1.4-root APP_VERSION=1.4 APP_UID=0                    # runs as root (runAsNonRoot scenarios)
 build 2.0.0-rc1 APP_VERSION=2.0.0-rc1 REQUIRED_ENV=FEATURE_FLAGS_URL  # bad auto-synced commit: crashes on start
+build 1.7      APP_VERSION=1.7                              # adds `labapp webhook` (A09, A10)

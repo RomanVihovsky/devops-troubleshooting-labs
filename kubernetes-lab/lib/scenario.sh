@@ -39,7 +39,7 @@ cmd_list() {
     fi
     title=$(sed -n '1s/^# *//p' "$d/ticket.md"); title=${title#"$id · "}
     mark=' '; grep -qx "$name" "$STATE_DIR/solved" 2>/dev/null && mark="${C_G}✔${C_0}"
-    [ "$cur" = "$(rel "$d")" ] && mark="${C_Y}▶${C_0}"
+    [ "$cur" = "$(rel "$d")" ] && ! lab_hidden && mark="${C_Y}▶${C_0}"
     printf ' %s %-5s %-4s %-8s %s\n' "$mark" "$id" "$(printf '%*s' "${lvl:-1}" '' | sed 's/ /•/g')" "$(yget reset "$d")" "$title"
   done < <(all_labs)
   echo
@@ -201,6 +201,52 @@ load_test() {
         --labels="$LAB_LABEL=${LAB_ID:-probe},lab.k8slab/role=load" --command -- labapp load "$url" -q "$@" 2>/dev/null | grep '^{' | tail -1)
   echo "${out:-"{}"}"
 }
+# ns_matrix <ns> <selector> [port]: every Running labapp pod reaches every other one by pod IP (`labapp get
+# /health`). Failing pairs go to stderr as "node -> node (ip)"; true when none failed (N12, X07)
+ns_matrix() {
+  local ns=$1 sel=$2 port=${3:-8080} src snode dst dip dnode bad=0 rows
+  rows=$(kx -n "$ns" get pods -l "$sel" --field-selector=status.phase=Running \
+           -o jsonpath='{range .items[*]}{.metadata.name} {.status.podIP} {.spec.nodeName}{"\n"}{end}' 2>/dev/null)
+  [ "$(grep -c . <<<"$rows")" -ge 2 ] || return 1
+  while read -r src _ snode; do
+    while read -r dst dip dnode; do
+      [ "$src" = "$dst" ] && continue
+      kx -n "$ns" exec "$src" -- labapp get -q --timeout 3 "http://$dip:$port/health" >/dev/null 2>&1 \
+        || { echo "    $snode -> $dnode ($dip) failed" >&2; bad=1; }
+    done <<<"$rows"
+  done <<<"$rows"
+  [ $bad = 0 ]
+}
+# outage_probe start <name> <url> [host] | gaps <name> | stop <name>: a prober on gw, one request every 0.5 s
+# for at most 1 h, "<epoch> <code>" lines in /var/tmp/lab-probe-<name>.log. gaps = the failed probes (not
+# 2xx/3xx). gw sees the MetalLB IPs and every NodePort, and is never drained (P16, K13, boss fights)
+outage_probe() {
+  local f="/var/tmp/lab-probe-$2.log"
+  case $1 in
+    # a pid file, not pkill -f: the pattern would also match the shell that runs pkill
+    start) nx k8s-gw "kill \$(cat $f.pid 2>/dev/null) 2>/dev/null; : > $f
+             setsid nohup timeout 3600 bash -c 'while :; do echo \"\$(date +%s) \$(curl -s -o /dev/null -w %{http_code} --max-time 2 ${4:+-H \"Host: $4\"} $3)\"; sleep 0.5; done' >> $f 2>/dev/null &
+             echo \$! > $f.pid" </dev/null ;;
+    gaps) nx k8s-gw "awk '\$2 !~ /^[23]/ { n++ } END { print n + 0 }' $f 2>/dev/null || echo 0" </dev/null ;;
+    stop) nx k8s-gw "kill \$(cat $f.pid 2>/dev/null) 2>/dev/null; rm -f $f.pid; true" </dev/null ;;
+    *) die "usage: outage_probe start <name> <url> [host] | gaps <name> | stop <name>" ;;
+  esac
+}
+# coredns_count [rcode]: DNS requests (or responses with this rcode, e.g. NXDOMAIN) summed over the CoreDNS
+# pods, from their :9153 metrics. Take it before and after, compare the delta (N08)
+coredns_count() {
+  local p m t=0 v
+  for p in $(kx -n kube-system get pods -l k8s-app=kube-dns -o jsonpath='{.items[*].metadata.name}'); do
+    m=$(kx get --raw "/api/v1/namespaces/kube-system/pods/$p:9153/proxy/metrics" 2>/dev/null) || continue
+    if [ -n "${1:-}" ]; then
+      v=$(awk -v r="rcode=\"$1\"" '$1 ~ /^coredns_dns_responses_total/ && index($1, r) { s += $2 } END { printf "%d", s }' <<<"$m")
+    else
+      v=$(awk '$1 ~ /^coredns_dns_requests_total/ { s += $2 } END { printf "%d", s }' <<<"$m")
+    fi
+    t=$((t + v))
+  done
+  echo "$t"
+}
 # node_reboot <node> [timeout]: reboot from inside the guest, wait until SSH answers with a new boot id. Not for
 # Ready: a reboot-surfacing fault may keep the node NotReady (L14) - the caller decides what "back" means.
 boot_id() { nx "$1" 'cat /proc/sys/kernel/random/boot_id' </dev/null 2>/dev/null; }
@@ -335,18 +381,19 @@ cmd_stop() {
   local d
   if [ -f "$STATE_DIR/current" ]; then
     d=$(current)
-    info "cleaning up $(basename "$d") (reset: $(yget reset "$d"))"
-    scenario_cleanup "$d" || warn "cleanup of $(basename "$d") failed"
+    info "cleaning up $(lab_label "$d") (reset: $(yget reset "$d"))"
+    scenario_cleanup "$d" || warn "cleanup of $(lab_label "$d") failed"
   fi
-  rm -rf "${WS:?}"/*/ 2>/dev/null; mkdir -p "$WS"
-  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR"/scenario.* "$SETUP_LOG"
+  rm -f "${WS:?}/current"; rm -rf "${WS:?}"/*/ 2>/dev/null; mkdir -p "$WS"
+  rm -f "$STATE_DIR/current" "$STATE_DIR/hint" "$STATE_DIR/hidden" "$STATE_DIR"/scenario.* "$SETUP_LOG"
 }
 
 show_ticket() {
-  echo; md "$1/ticket.md"
+  local id w; id=$(yget id "$1"); w=$id; lab_hidden && w=current
+  echo; sed -e "s#workspace/$id\\b#workspace/$w#g" "$1/ticket.md" | md
   cat <<EOF
 
-${C_BOLD}Work${C_0}: eval "\$(./lab env)" (kubectl, helm, argocd, kubeseal, bao) · ./lab node <n> · workspace/$(yget id "$1")/
+${C_BOLD}Work${C_0}: eval "\$(./lab env)" (kubectl, helm, argocd, kubeseal, bao) · ./lab node <n> · workspace/$w/
 ${C_BOLD}Check${C_0}: ./lab verify   ${C_BOLD}Stuck?${C_0} ./lab hint
 EOF
 }
@@ -358,15 +405,17 @@ cmd_start() {
   if [ "$1" = random ]; then d=$(all_labs | while read -r x; do [ "$(yget kind "$x")" = incident ] && echo "$x"; done | shuf -n1)
   else d=$(lab_dir "$1"); fi
   name=$(basename "$d"); id=$(yget id "$d")
+  mode_abandon
   cmd_stop
   if ! cluster_quick; then
     warn "the cluster is not in its baseline shape - cluster reset"
     cluster_reset cluster >/dev/null || die "cluster reset failed - ./lab cluster doctor"
     cluster_quick || die "cluster still unhealthy after a reset - ./lab cluster doctor"
   fi
-  if [ "$1" = random ]; then info "Starting a random incident..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
+  if [ "$1" = random ] || [ -n "${IV_INTERNAL:-}" ]; then info "Starting a random incident..."; else info "Starting ${C_BOLD}$name${C_0}..."; fi
   rel "$d" > "$STATE_DIR/current"
   mkdir -p "$WS/$id"
+  if [ "$1" = random ] || [ -n "${IV_INTERNAL:-}" ]; then touch "$STATE_DIR/hidden"; ln -sfn "$id" "$WS/current"; fi
   [ -d "$d/manifests" ] && cp -a "$d/manifests/." "$WS/$id/"
   [ "$(yget gitops "$d")" = true ] && gitops_clone >/dev/null
   : > "$SETUP_LOG"
@@ -378,17 +427,17 @@ cmd_start() {
   git -C "$WS/$id" init -q 2>/dev/null; git -C "$WS/$id" add -A
   git -C "$WS/$id" -c user.name=lab -c user.email=lab@k8s.lab commit -qm "as found" --allow-empty
   remember started "$(date +%s)"
-  show_ticket "$d"
+  [ -n "${CHAOS:-}" ] || show_ticket "$d"
 }
 
-cmd_ticket() { show_ticket "$(current)"; }
+cmd_ticket() { if ch_active; then cmd_chaos ticket; else show_ticket "$(current)"; fi; }
 
 cmd_hint() {
   local d n total
   d=$(current); total=$(grep -c '^## ' "$d/hints.md")
   if [ $# -ge 1 ]; then n=$1; else n=$(( $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0) + 1 )); fi
   [ "$n" -gt "$total" ] && n=$total
-  echo "$n" > "$STATE_DIR/hint"
+  echo "$n" > "$STATE_DIR/hint"; mode_hint "$n"
   echo "${C_BOLD}Hint $n/$total${C_0}"
   awk -v n="$n" '/^## /{i++; next} i==n' "$d/hints.md" | md
   [ "$n" -lt "$total" ] && echo "${C_C}(./lab hint for the next one)${C_0}"
@@ -398,11 +447,12 @@ cmd_hint() {
 cmd_verify() {
   local d rc=0
   d=$(current); export LAB_ID; LAB_ID=$(yget id "$d")
-  info "Verifying $(basename "$d")"
+  info "Verifying $(lab_label "$d")"
   # house rule: verify runs with -u but WITHOUT pipefail (kubectl | grep -q races)
   KX_TIMEOUT=10s run_lab_script "$d/.lab/verify.sh" "$WS/$LAB_ID" "-u" || rc=$?
   if [ $rc -eq 0 ] && [ -z "${LAB_SELFTEST:-}" ]; then
     grep -qx "$(basename "$d")" "$STATE_DIR/solved" 2>/dev/null || basename "$d" >> "$STATE_DIR/solved"
+    mode_solved
   fi
   return $rc
 }
@@ -410,19 +460,25 @@ cmd_verify() {
 cmd_solution() {
   local d a; d=$(current)
   if [ -t 0 ] && [ "${1:-}" != -y ]; then
-    read -r -p "Show the solution for $(basename "$d")? This is a spoiler. [y/N] " a
+    read -r -p "Show the solution for $(lab_label "$d")? This is a spoiler. [y/N] " a
     [[ $a =~ ^[yY] ]] || exit 0
   fi
+  mode_reveal
   md "$d/.lab/solution.md"
 }
 
 cmd_solve() {
   local d; d=$(current); export LAB_ID; LAB_ID=$(yget id "$d")
-  info "Applying the reference fix for $(basename "$d")"
+  mode_reveal
+  info "Applying the reference fix for $(lab_label "$d")"
   run_lab_script "$d/.lab/solve.sh" "$WS/$LAB_ID"
 }
 
-cmd_reset() { local d; d=$(current); cmd_start "$(basename "$d")"; }
+cmd_reset() {   # a hidden lab (interview, exam, chaos, random) stays hidden and keeps its mode running
+  local d; d=$(current)
+  if lab_hidden; then IV_INTERNAL=1 CHAOS=$(ch_active && echo 1 || true) cmd_start "$(basename "$d")"
+  else cmd_start "$(basename "$d")"; fi
+}
 
 cmd_diff() {
   local d id; d=$(current); id=$(yget id "$d")
@@ -433,10 +489,13 @@ cmd_diff() {
 cmd_status() {
   if [ -f "$STATE_DIR/current" ]; then
     local d; d=$(current)
-    echo "lab: $(basename "$d") (reset: $(yget reset "$d"), started $(( ($(date +%s) - $(recall started)) / 60 )) min ago, hints used: $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0))"
+    echo "lab: $(lab_label "$d") (reset: $(yget reset "$d"), started $(( ($(date +%s) - $(recall started)) / 60 )) min ago, hints used: $(cat "$STATE_DIR/hint" 2>/dev/null || echo 0))"
   else
     echo "lab: none"
   fi
+  if iv_active; then iv_cmd "$(iv_mode)" status; fi
+  if ch_active; then cmd_chaos status; fi
+  return 0
 }
 
 # --------------------------------------------------------------- selftest ----

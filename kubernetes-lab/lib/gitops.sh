@@ -272,12 +272,14 @@ gitops_clone() {
 }
 
 # ------------------------------------------------------------------ images ----
+# images_build [tag..]: build every labapp tag, push the given ones (default: all). Pushing only a new tag
+# keeps the existing tags byte-identical in the registry, so the nodes' cached images still match them
 images_build() {
-  local t
+  local t tags=${*:-$LABAPP_TAGS}
   command -v docker >/dev/null || die "docker is needed on this desktop to build labapp"
-  info "building labapp ($LABAPP_TAGS) with apps/labapp/build.sh"
+  info "building labapp ($LABAPP_TAGS) with apps/labapp/build.sh, pushing: $tags"
   bash "$LAB_DIR/apps/labapp/build.sh" "$LAB_REG/lab" >/dev/null || die "labapp build failed"
-  for t in $LABAPP_TAGS; do
+  for t in $tags; do
     docker save "$LAB_REG/lab/labapp:$t" | push_file k8s-gw /var/tmp/labapp.tar 644
     nx k8s-gw "crane push --insecure /var/tmp/labapp.tar $LAB_REG/lab/labapp:$t >/dev/null 2>&1; rc=\$?; rm -f /var/tmp/labapp.tar; exit \$rc" </dev/null \
       || die "crane push labapp:$t failed"
