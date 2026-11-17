@@ -1,0 +1,11 @@
+id: Y08
+title: Secret api-key flips between two values every few seconds
+kind: incident
+level: 3
+domain: secrets
+wave: 3
+est: 30m
+reset: ns
+namespaces: [partners]
+gitops: true
+openbao: true

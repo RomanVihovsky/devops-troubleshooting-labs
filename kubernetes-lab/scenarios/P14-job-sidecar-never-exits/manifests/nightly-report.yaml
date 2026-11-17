@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nightly-report
+  namespace: reports
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels: {app: nightly-report}
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: logs
+          emptyDir: {}
+      containers:
+        - name: report
+          image: registry.lab:5000/lab/labapp:1.4
+          command: ["sh", "-c"]
+          args:
+            - |
+              for part in sales returns inventory; do
+                echo "$(date -u +%FT%TZ) building $part" >> /var/log/report/run.log; sleep 3
+              done
+              echo "$(date -u +%FT%TZ) report complete" >> /var/log/report/run.log
+          volumeMounts: [{name: logs, mountPath: /var/log/report}]
+        - name: shipper
+          image: registry.lab:5000/lab/labapp:1.4
+          args: ["ship-logs", "/var/log/report/run.log"]
+          volumeMounts: [{name: logs, mountPath: /var/log/report}]

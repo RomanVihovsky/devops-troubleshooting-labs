@@ -1,0 +1,9 @@
+id: X05
+title: The database policy lets far more in than intended
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 15m
+reset: ns
+namespaces: [db, monitoring]

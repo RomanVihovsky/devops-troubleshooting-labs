@@ -1,0 +1,9 @@
+id: S10
+title: Web pods disappear whenever the nightly batch starts
+kind: incident
+level: 3
+domain: scheduling
+wave: 3
+est: 25m
+reset: ns
+namespaces: [storefront]

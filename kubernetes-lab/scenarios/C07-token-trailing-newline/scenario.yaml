@@ -1,0 +1,9 @@
+id: C07
+title: The partner API rejects our token, but only from Kubernetes
+kind: incident
+level: 3
+domain: config
+wave: 3
+est: 20m
+reset: ns
+namespaces: [ledger]

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: egress-guard, namespace: security-system}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: egress-guard}}
+  template:
+    metadata: {labels: {app: egress-guard}}
+    spec:
+      containers:
+        - name: webhook
+          image: registry.lab:5000/lab/labapp:1.7
+          args: ["webhook"]
+          env:
+            - {name: TLS_CERT_FILE, value: /tls/tls.crt}
+            - {name: TLS_KEY_FILE, value: /tls/tls.key}
+            - {name: WEBHOOK_MODE, value: mutate}
+            - name: WEBHOOK_PATCH
+              value: >-
+                [{"op": "add", "path": "/spec/containers/{c}/env/-",
+                  "value": {"name": "HTTPS_PROXY", "value": "http://egress-proxy.security-system.svc:3128"}},
+                 {"op": "add", "path": "/spec/containers/{c}/env/-",
+                  "value": {"name": "HTTP_PROXY", "value": "http://egress-proxy.security-system.svc:3128"}}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8443, scheme: HTTPS}
+            periodSeconds: 5
+          volumeMounts: [{name: tls, mountPath: /tls, readOnly: true}]
+      volumes:
+        - name: tls
+          secret: {secretName: egress-guard-tls}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: egress-guard, namespace: security-system}
+spec:
+  selector: {app: egress-guard}
+  ports: [{port: 443, targetPort: 8443}]

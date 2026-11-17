@@ -1,0 +1,9 @@
+id: X08
+title: 'Batch pods stuck in ContainerCreating: "No IPs available in pools"'
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 25m
+reset: ns
+namespaces: [batch]

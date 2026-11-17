@@ -1,0 +1,9 @@
+id: S05
+title: Half the replicas Pending under a zone spread constraint
+kind: incident
+level: 3
+domain: scheduling
+wave: 3
+est: 20m
+reset: ns
+namespaces: [search]

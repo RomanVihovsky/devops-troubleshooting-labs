@@ -1,0 +1,9 @@
+id: A10
+title: Every new pod crashes after the security team's egress rollout
+kind: incident
+level: 3
+domain: security
+wave: 3
+est: 25m
+reset: ns
+namespaces: [wallet, security-system]

@@ -1,0 +1,9 @@
+id: O10
+title: 'The pipeline''s apply fails: "conflict with ops-hotfix"'
+kind: incident
+level: 3
+domain: operations
+wave: 3
+est: 20m
+reset: ns
+namespaces: [inventory]

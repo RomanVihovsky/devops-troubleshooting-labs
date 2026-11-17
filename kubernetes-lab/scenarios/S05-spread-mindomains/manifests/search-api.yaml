@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-api
+  namespace: search
+spec:
+  replicas: 4
+  selector:
+    matchLabels: {app: search-api}
+  template:
+    metadata:
+      labels: {app: search-api}
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          minDomains: 3                     # prod runs in eu-central-1a/b/c
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels: {app: search-api}
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: search-api}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}

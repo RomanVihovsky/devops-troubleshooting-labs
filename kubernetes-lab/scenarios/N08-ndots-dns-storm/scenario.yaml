@@ -1,0 +1,9 @@
+id: N08
+title: Every outbound call costs a burst of failed DNS lookups
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 20m
+reset: ns
+namespaces: [scanner]
