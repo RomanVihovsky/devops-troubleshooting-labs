@@ -1,0 +1,10 @@
+id: L18
+title: Random new-connection timeouts from pods on k8s-w3 only
+kind: incident
+level: 3
+domain: nodes
+wave: 3
+est: 30m
+reset: node
+nodes: [w3]
+namespaces: [quotes]
