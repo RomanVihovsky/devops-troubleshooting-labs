@@ -205,7 +205,7 @@ X09, all in wave 1.
 | **3 Framework** | CLI, helpers, reset ladder, 4 pilots (ns/node/cluster/GitOps) | Pilots pass selftest twice in a row |
 | **4 Learn** | T01-T16 | selftest green |
 | **5 Wave 1** (~60) | P/S/N/V/A basics, K01-K04, L01-L06, L11-L14, the 8 research scenarios | selftest green |
-| **6 Wave 2** (~75) | C, R, W, G, X, O, rest of K/L/D/Y | selftest green |
+| **6 Wave 2** (92) | C, R, W, G, X, O, Q, rest of K/L/D/Y, P02/P03/V05 + the level-2 rows | selftest green |
 | **7 Wave 3** (~45) | Level 3, B01-B07, interview/exam/chaos | Full selftest within a night |
 | **8 Docs** | README, CATALOG final, FAULTS.md, INTERVIEW-QUESTIONS, root README | - |
 
@@ -560,3 +560,81 @@ Settled on 2026-11-08 by the v2 decisions above.
 - **Phase 5: DONE (2026-11-11).** Next: Phase 6, wave 2 (~75: C/R/W/G/X/O, the rest of K/L/D/Y, plus
   P02/P03/V05 and the deferred level-2 rows). Open gap carried over: the PLAN §2 gw description
   (docker/dnsmasq/apt-cacher-ng) vs the real Docker-free gw.
+
+### Phase 6 (2026-11-11..17): wave 2 - 92 incidents
+
+- **92 incidents** with `wave: 2`: all the level-1/2 rows (PLAN's ~75, plus P05, P13, P15, S12-S14, N10, V07,
+  A04, A07, A08, A11 and Q01-Q05). K15 rejoins `k8s-w3`; w4 stays a spare. Each batch was committed once its
+  batch selftest was green:
+  - 6a infra + framework - commit 7599eb2;
+  - 6b GitOps + secrets (D05-D11, Y04-Y07, Y09, Y10) - commit e9fa5a2;
+  - 6c control plane + nodes (K08-K10, K14, K15, K17, L09, L10, L15, L16, S12, R04, R08) - commit 613e46b;
+  - 6d pods, config, storage (C01-C06, C08, P02, P03, P05, P13, P15, V05, V07) - commit fe58e65;
+  - 6e workloads + scheduling (W01-W12, S13, S14, N10) - commits 4c7d214 and 33ab881 (W11);
+  - 6g ingress + NetworkPolicy (G01-G08, X01-X04, X06, X10) - commit 49b7c72;
+  - 6f resources + forensics (R01-R03, R05, R06, R10, Q01-Q05) - commit 20a9d13;
+  - 6h ops + security (O01-O08, A04, A07, A08, A11) - commit b7d7c55;
+  - gate fixes - commits 17ded47 (O07, D09, R04) and d6dedf8 (D09's verify).
+- **Infra** (a new golden after doctor PASS):
+  - a private registry `registry.lab:5001` on gw (the same images, htpasswd user `ci`, a `certs.d` entry on
+    every node; P02);
+  - `LAB_IMAGES` takes a `%platform` suffix: `lab/nginx:1.30-alpine` (C04) and `lab/labapp:1.6`, an arm64
+    image under an ordinary tag (P03);
+  - the Gitea user `argocd`, a read-only collaborator that Argo CD's repo Secret uses (D05);
+  - stern on the desktop (Q05); doctor checks the private registry.
+- **Framework**:
+  - helpers `https_out`, `load_test`, `node_reboot`, `user_kubeconfig`, `pods_get` (per-replica answers),
+    `argo_repo_secret`, `eso_store_restore`, `gitea_argocd_user`;
+  - `helm_up --force-conflicts`: Helm 4 applies server-side, and a hand patch made a plain upgrade fail
+    with a conflict (R02's cleanup);
+  - setup and solve run with errtrace (`set -E`), so the ERR trap also names a failing command inside a
+    helper (Q01 died silently in `http_ok`);
+  - `kns` waits (up to 4 min) for a namespace of the previous run that is still Terminating;
+  - `http_code` reads only busybox wget's `HTTP/` status line (it returned 0 for every 4xx/5xx);
+  - `stable_for` ignores Failed/Succeeded pods (evicted pods stay as Failed objects);
+  - the GitOps reset re-syncs a failed root app until it converges (`root_converged`), and restores the repo
+    Secret and the root app's spec;
+  - the node reset re-enables chrony and waits for the sync, and deletes Failed pods;
+  - `reset_openbao` restores `/etc/openbao` first when OpenBao is sealed or down; the gw reset restarts the
+    :5001 registry too.
+- **Fixes on the way** (details in FAULTS.md):
+  - R02: one metrics-server replica with `maxUnavailable: 25%` rounds down to 0, so the old pod kept
+    serving. The setup also sets `strategy: Recreate`;
+  - W11: a Deployment prunes old ReplicaSets only when a rollout completes. The bad release now rolls out
+    completely and breaks at runtime (1.4 + `ERROR_RATE=1`);
+  - K17: setups run with `pipefail`, so `kx ... | grep -q` failed whenever kx failed. Capture first, then grep;
+  - K14, L16: open connections hide faults. A haproxy `reload` keeps old connections, and TLS validity is
+    checked only at the handshake: a haproxy restart and a kubelet restart are needed;
+  - V05, V07: NFS `--manage-gids` checks the primary group on the server, so `fsGroup` must equal
+    `runAsGroup`;
+  - X01: jq 1.6 `-e` exits 0 on empty input. Slurp and count instead;
+  - D09: Argo CD runs PreSync hooks before any Sync-phase object exists, including the chart's own
+    ServiceAccount, and hook resources carry a finalizer that the cleanup strips;
+  - G02, G05: Traefik answers 404 for a wrong backend port and 503 for no endpoints. A second Gateway on
+    `web:8000` works.
+- **First batch runs**: about 1 lab in 4 needed a fix on its first run (6d: P15, V07; 6e: W03, W11; 6f: R02).
+  Every failure was a scenario or framework bug, fixed and rerun green.
+- **Gate, first attempt (2026-11-16)**:
+  - wave2 run 1: 91/92. O07's cache pods missed `k8s-w2`; it now runs 3 replicas, one per worker;
+  - run 2 was stopped at X02. D09 failed: its SealedSecret, as a `BeforeHookCreation` hook, raced the
+    controller, so it was redesigned around a chart ConfigMap. R04's setup flaked: free memory drifts by
+    hundreds of MiB, so it now measures, sets the threshold and re-measures until batch-cache is evicted.
+- **Gate: PASSED (2026-11-17)**, accepted with one test-only failure:
+  - `./lab selftest wave2`, 10:51-12:38 UTC: **92/92** `broken:ok fixed:ok`;
+  - `./lab selftest wave2`, 12:38-14:22 UTC: **91/92**. D09's fault and reference fix both worked; only the
+    verify's "fresh sync" check failed. Argo CD starts the sync within the second it was asked for, and the
+    check wanted `startedAt > t0`, both in whole seconds. It now uses `>=`, waits until no operation runs,
+    and asks again if the request was dropped (d6dedf8). Then `./lab selftest D09 D09 D09`: 3/3;
+  - `./lab selftest wave1`, 14:22-15:41: **61/61**;
+  - `./lab selftest learn`, 15:41-16:13: **16/16**;
+  - `./lab cluster doctor`: PASS.
+- **Timings** (gate runs; each lab's time includes the cleanup of the lab before it):
+  - **a wave2 run takes ≈ 104-107 min**: 59-63 labs ≤ 60 s, 14-17 take 61-120 s, 15-16 take > 120 s;
+  - the slowest: D07 342-343 s, D06 274-286 s, K17 227-231 s, K15 212-220 s, R04 192-195 s, K14 183-190 s,
+    L16 169-172 s, W10 162-176 s, K10 160-169 s, R02 158-163 s;
+  - D09 takes 95-185 s (372 s when its verify waited out the timeout);
+  - a wave1 run now takes ≈ 78 min (72 in Phase 5; the slowest are L01 243 s and D04 211 s), and a learn run
+    ≈ 30 min (T09 568 s).
+- **Phase 6: DONE (2026-11-17).** The PLAN §2 gw description now matches the Docker-free gw (registry :5000 and
+  :5001). Next: Phase 7, wave 3 - the 42 remaining rows (35 level-3 incidents + B01-B07), the `rebuild` reset
+  for K13, and `./lab interview | exam | chaos`.
