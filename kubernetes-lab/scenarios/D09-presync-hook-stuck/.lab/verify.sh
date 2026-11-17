@@ -9,9 +9,20 @@ check_eventually 300 "billing: last sync Succeeded with a PreSync migration hook
 check_eventually 120 "billing Synced + Healthy" argo_app_ok billing
 check "ConfigMap billing comes from the chart (not made by hand)" from_chart
 # a fresh sync must not hang either (the next release)
+# Timestamps have whole seconds and Argo CD often starts the sync within the second it was asked for: ">=".
+# A request made while an auto-sync runs is dropped when that operation ends: wait until idle, and ask again
+# while no newer operation has started.
+idle() { [ "$(op | jq -r '.phase')" != Running ] && [ -z "$(kx -n argocd get application billing -o jsonpath='{.operation}')" ]; }
+[ -n "${LAB_EXPECT_FAIL:-}" ] || retry 120 idle || true
 t0=$(date -u +%FT%TZ)
 [ -n "${LAB_EXPECT_FAIL:-}" ] || argo_sync billing
-resynced() { op | jq -e --arg t "$t0" '.startedAt > $t' >/dev/null && synced_with_hook; }
+resynced() {
+  if ! op | jq -e --arg t "$t0" '.startedAt >= $t' >/dev/null; then
+    [ -n "${LAB_EXPECT_FAIL:-}" ] || ! idle || argo_sync billing
+    return 1
+  fi
+  synced_with_hook
+}
 check_eventually 240 "a fresh sync also Succeeds (PreSync migration included)" resynced
 check_eventually 120 "billing pods Ready" deploy_ready billing billing
 verdict
