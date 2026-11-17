@@ -7,5 +7,5 @@ starts (it's a PreSync hook on purpose - don't make it PostSync). Its pod never 
 through, and make sure the next release won't hang the same way.
 
 **Test**: billing is Synced + Healthy and its last sync Succeeded with the migration as a **PreSync** hook that
-Succeeded; a fresh sync (the test triggers one) also Succeeds; the Secret `db-creds` comes from its
-SealedSecret (not made by hand); billing pods are Ready.
+Succeeded; a fresh sync (the test triggers one) also Succeeds; the settings ConfigMap `billing` comes from the
+chart (not made by hand); billing pods are Ready.

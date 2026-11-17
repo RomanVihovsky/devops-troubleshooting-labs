@@ -169,6 +169,10 @@ Gotchas:
   needs a release that rolls out completely and breaks at runtime (W11).
 - **`maxUnavailable: 25%` of 1 replica rounds down to 0**: a broken new pod never replaces the old one, and the
   old one keeps serving. A fault in a single-replica add-on needs `strategy: Recreate` (R02).
+- **`memory.available` drifts by hundreds of MiB** (page cache moving between active and inactive, a kubelet
+  restart). An eviction threshold "free + 300Mi", measured once, sometimes evicted nothing, and a bigger margin
+  would outlast the victim's ~600 MiB and evict other pods. Measure, set, wait for the eviction, and re-measure
+  if none came (R04).
 - **jq 1.6 (the desktop's) exits 0 for `-e` on empty input** (jq 1.7 exits 4). `pods_get ... | jq -e '.x'` is "true"
   when every request timed out and nothing was printed (X01's setup never saw the fault). For output that may be
   empty, slurp and count: `jq -se 'length > 0 and all(.[]; ...)'`.
