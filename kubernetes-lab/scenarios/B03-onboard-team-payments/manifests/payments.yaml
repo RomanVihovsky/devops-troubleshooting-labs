@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ledger, namespace: payments-team}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ledger}}
+  template:
+    metadata: {labels: {app: ledger}}
+    spec:
+      containers:
+        - name: ledger
+          image: registry.lab:5000/lab/labapp:1.4
+          env: [{name: APP_NAME, value: ledger}]
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: ledger, namespace: payments-team}
+spec:
+  selector: {app: ledger}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: payments-api, namespace: payments-team}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: payments-api}}
+  template:
+    metadata: {labels: {app: payments-api}}
+    spec:
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: payments-api}
+            - {name: UPSTREAM_URL, value: "http://ledger:8080/items"}
+            - {name: UPSTREAM_REQUIRED, value: "true"}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
