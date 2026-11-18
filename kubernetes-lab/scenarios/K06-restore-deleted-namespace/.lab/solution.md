@@ -16,7 +16,8 @@ The whole cluster goes back to the snapshot's moment: objects created since are 
 `orders`' pods come back as new pods.
 
 **Kubelets after a restore**: their watches point at revisions newer than the restored store and stall - restart
-the kubelet on every node, or new pods are never started.
+the kubelet on every node, or new pods are never started - and calico-node + kube-proxy, or new pods get no
+network.
 
 **Ghost pods**: the snapshot brings back the old Pod objects with status *Running*, but their kubelets already
 terminated those UIDs and won't start them again (`exec`: *pod does not exist*). Recreate them:

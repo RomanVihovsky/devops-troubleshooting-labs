@@ -195,7 +195,8 @@ Gotchas:
   *unhealthy* while any alarm is active - wait with `endpoint status` (K11). haproxy drops the API server for a few
   seconds while etcd restarts (EOF through the LB).
 - **After an etcd restore, restart every kubelet**: their watches point at revisions newer than the restored
-  store and stall - new pods on their nodes stay Pending (B06).
+  store and stall - new pods on their nodes stay Pending (B06). The same for calico-node (new pods get no network)
+  and kube-proxy: `rollout restart` both DaemonSets.
 - **Pods restored from an etcd snapshot are ghosts**: the Pod objects come back *Running* and Ready, but their
   kubelets terminated those UIDs and never restart them (`exec`: *pod does not exist*; a kubelet restart revives the
   container, not its network). Force-delete them (`--grace-period=0 --force`: a graceful delete hangs in Terminating, no kubelet confirms it); verify with `pods_get` /

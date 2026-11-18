@@ -15,6 +15,10 @@ retry 180 nodes_ready || true
 # the kubelets' watches point at revisions newer than the restored store and stall: restart them
 for n in $(cluster_nodes); do nx "$n" 'systemctl restart kubelet' </dev/null; done
 sleep 15; retry 180 nodes_ready || true
+# ...and the node agents that watch the API too (calico-node: no routes/policy for new pods, kube-proxy)
+kx -n kube-system rollout restart ds/calico-node ds/kube-proxy >/dev/null
+kx -n kube-system rollout status ds/calico-node --timeout=300s >/dev/null 2>&1 || true
+kx -n kube-system rollout status ds/kube-proxy --timeout=200s >/dev/null 2>&1 || true
 # pods restored from etcd are ghosts - no kubelet will ever confirm their deletion, so force it (their kubelets already killed those UIDs): recreate them
 kx -n prod delete pod --all --grace-period=0 --force >/dev/null 2>&1
 retry 180 deploy_ready prod orders 2 || true
