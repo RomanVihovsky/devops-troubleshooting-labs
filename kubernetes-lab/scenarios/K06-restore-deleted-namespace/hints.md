@@ -10,4 +10,5 @@ manifest), then point the `etcd-data` hostPath at the new dir. Don't leave copie
 
 ## Hint 3
 The kubelet restarts etcd when the manifest changes; the API server keeps a watch cache of the old data - restart it
-too (`crictl stop` its container, or touch its manifest). Then `kubectl get ns prod`.
+too (`crictl stop` its container, or touch its manifest). Then `kubectl get ns prod` - and look closely at the restored
+pods: `kubectl -n prod exec deploy/orders -- labapp get localhost:8080/ready`.

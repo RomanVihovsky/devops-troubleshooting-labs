@@ -15,6 +15,14 @@ The whole cluster goes back to the snapshot's moment: objects created since are 
 **original UIDs** (owner references and finalizers keep working). Kubelets and controllers reconcile the rest -
 `orders`' pods come back as new pods.
 
+**Kubelets after a restore**: their watches point at revisions newer than the restored store and stall - restart
+the kubelet on every node, or new pods are never started.
+
+**Ghost pods**: the snapshot brings back the old Pod objects with status *Running*, but their kubelets already
+terminated those UIDs and won't start them again (`exec`: *pod does not exist*). Recreate them:
+`kubectl -n prod delete pod --all --grace-period=0 --force` (a graceful delete would hang in *Terminating*: no kubelet
+confirms it) - the ReplicaSet makes real ones.
+
 **Interview notes**
 - Restoring = going back in time for **everything**: prefer re-applying from Git/Velero for a single namespace when
   you can; etcd restore is the last resort (or the DR path).

@@ -14,7 +14,9 @@ restored() { local i; i=$(member_inode); [ -n "$i" ] && [ "$i" != "$(recall k06_
 manifests4() { [ "$(nx "$CP" 'ls /etc/kubernetes/manifests | wc -l' </dev/null)" = 4 ]; }
 check_eventually 180 "the API answers" api_ok
 check "prod, orders, orders-config and orders-db are back with their original UIDs and data" objects_back
+serving() { local o; o=$(pods_get prod app=orders /ready); [ "$(grep -c '"ready"' <<<"$o")" -ge 2 ]; }
 check_eventually 180 "orders: 2 Ready pods" deploy_ready prod orders 2
+check_eventually 120 "both orders pods really run (not ghosts from the snapshot)" serving
 check "etcd runs from restored data (a new member dir)" restored
 check_eventually 180 "all nodes Ready" nodes_ready
 check "only the 4 control-plane manifests in /etc/kubernetes/manifests" manifests4

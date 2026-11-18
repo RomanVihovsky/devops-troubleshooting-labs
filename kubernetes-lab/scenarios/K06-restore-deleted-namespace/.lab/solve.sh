@@ -12,4 +12,9 @@ retry 180 etcd_up || die "etcd did not come back from the restored data"
 nx "$CP" 'crictl stop $(crictl ps --name kube-apiserver -q) >/dev/null 2>&1; true' </dev/null
 retry 180 kx get --raw /readyz || die "API not back after the restore"
 retry 180 nodes_ready || true
+# the kubelets' watches point at revisions newer than the restored store and stall: restart them
+for n in $(cluster_nodes); do nx "$n" 'systemctl restart kubelet' </dev/null; done
+sleep 15; retry 180 nodes_ready || true
+# pods restored from etcd are ghosts - no kubelet will ever confirm their deletion, so force it (their kubelets already killed those UIDs): recreate them
+kx -n prod delete pod --all --grace-period=0 --force >/dev/null 2>&1
 retry 180 deploy_ready prod orders 2 || true

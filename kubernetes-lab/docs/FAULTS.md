@@ -191,7 +191,15 @@ Gotchas:
   default route to the NAT NIC (`10.0.2.15`, the same on every VM) (X07). IPPools are CRD-only
   (`crd.projectcalico.org/v1`, no defaulting); exhaustion says *No IPs available in pools* (X08).
 - **etcd NOSPACE**: after raising the quota, wait for the **new** etcd process before `alarm disarm` - the old one
-  re-raises the alarm at once (K11).
+  re-raises the alarm at once, and the alarm is persisted across the restart. `etcdctl endpoint health` reports
+  *unhealthy* while any alarm is active - wait with `endpoint status` (K11). haproxy drops the API server for a few
+  seconds while etcd restarts (EOF through the LB).
+- **After an etcd restore, restart every kubelet**: their watches point at revisions newer than the restored
+  store and stall - new pods on their nodes stay Pending (B06).
+- **Pods restored from an etcd snapshot are ghosts**: the Pod objects come back *Running* and Ready, but their
+  kubelets terminated those UIDs and never restart them (`exec`: *pod does not exist*; a kubelet restart revives the
+  container, not its network). Force-delete them (`--grace-period=0 --force`: a graceful delete hangs in Terminating, no kubelet confirms it); verify with `pods_get` /
+  `exec`, never with `deploy_ready` alone (K06, B06).
 - **`pkill -f` matches its own shell** when the pattern appears in the command line: use pid files (`outage_probe`).
 - **Rolling updates and topology spread**: without `matchLabelKeys: [pod-template-hash]` the new ReplicaSet spreads
   around the old pods and can end up uneven (S05).
