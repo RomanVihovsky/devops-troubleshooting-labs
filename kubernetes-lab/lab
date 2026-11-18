@@ -43,7 +43,7 @@ ${C_BOLD}Practice modes${C_0} (lab IDs hidden, setups don't count)
   ./lab chaos start [level]   a random incident with NO ticket: find what's broken - ./lab chaos help
 
 ${C_BOLD}Cluster${C_0}
-  ./lab cluster doctor        end-to-end health check (31 checks incl. GitOps & secrets)
+  ./lab cluster doctor        end-to-end health check (33 checks incl. GitOps, secrets, registry)
   ./lab cluster reset [cluster | node <node..>]   back to the golden baseline, in-guest (~1 min)
   ./lab cluster golden        save the reset baseline (node files, etcd snapshot, gw data) on this desktop
   ./lab cluster build | upgrade <minor> | rebuild   kubeadm build at $K8S_BUILD_VERSION / upgrade / from scratch

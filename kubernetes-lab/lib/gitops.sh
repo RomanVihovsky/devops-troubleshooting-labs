@@ -77,6 +77,12 @@ gx() { curl -fsS --max-time 10 -H "Authorization: token $(cat "$GITEA_DIR/token"
 rand() { openssl rand -hex 16; }
 # registry_ci_password: the password of user ci on the private registry registry.lab:5001 (made by gw's provision)
 registry_ci_password() { nx k8s-gw 'cat /etc/k8slab/registry-ci.password' </dev/null; }
+# labapp_tags_ok: every tag of LABAPP_TAGS is in the lab registry (the registry's storage is not part of the golden:
+# a VM snapshot restore can take a tag pushed later away - ./lab images build <tag>)
+labapp_tags_ok() {
+  local have t; have=$(nx k8s-gw "crane ls --insecure $LAB_REG/lab/labapp" </dev/null 2>/dev/null) || return 1
+  for t in $LABAPP_TAGS; do grep -qx "$t" <<<"$have" || return 1; done
+}
 private_registry_ok() {
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://192.168.56.20:5001/v2/)" = 401 ] \
     && curl -fs --max-time 5 -u "ci:$(registry_ci_password)" http://192.168.56.20:5001/v2/lab/labapp/tags/list | grep -q '"1.4"'
