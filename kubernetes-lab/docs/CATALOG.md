@@ -1,7 +1,8 @@
 # Scenario catalog - 195 incidents + 16 learn labs (SPOILERS)
 
-> Every row reveals the root cause and how it is injected. Fine while reviewing the plan;
-> once the lab is built, practise from tickets only (`./lab start <id>`).
+> Every row reveals the root cause and how it is injected - read it after a lab, not before. All 195 incidents and
+> 16 learn labs are built and selftested; practise from the tickets (`./lab start <id>`, `./lab interview`,
+> `./lab exam`, `./lab chaos`). The README lists them by ticket title, without spoilers.
 
 Columns: **Lvl** 1 = one obvious layer, 2 = needs the right concept/tool, 3 = multi-layer / internals.
 **Reset** (cheapest level that restores the golden baseline):

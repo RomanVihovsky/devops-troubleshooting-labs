@@ -12,7 +12,7 @@ Hands-on troubleshooting practice for DevOps and SRE work. Each scenario breaks 
 purpose, following failure patterns that come up in interviews and real postmortems. It gives you
 only what you would get on call: a ticket with symptoms and a definition of done. You investigate
 with real tools in a real shell, fix the problem the way you would in production, and `./lab verify`
-checks the result automatically. There are 283 incidents across five labs, plus guided learn tracks
+checks the result automatically. There are 325 incidents across five labs, plus guided learn tracks
 for Terraform/Terragrunt (14 labs), Ansible (16 labs) and Kubernetes (16 labs). Everything runs
 locally: four labs in Docker, and kubernetes-lab on a real kubeadm cluster in five VirtualBox VMs. No
 cloud account, no root on the host, and no internet after the first build. Use it for interview
@@ -39,11 +39,10 @@ preparation, on-call drills or teaching.
 | [swarm-lab](swarm-lab/README.md) | Scheduling and placement, images, secrets, overlay networking and DNS, healthchecks, cgroups and exit 137, filesystems, signals, firewalls, MTU, `tc`/netem, routing, Raft quorum loss, plus a chaos mode for your own faults | 20 | A 3-node Docker Swarm in which every node is a Docker-in-Docker "VM" |
 | [terra-labs](terra-labs/README.md) | Terraform 1.17 and Terragrunt 1.2: state, locking and backends, refactors and `moved`, drift, `for_each`, modules and versions, provider lock files, Stacks, dependencies and mocks, `terraform test`, secrets in state, pipelines | 14 learn + 37 incidents | Pinned Terraform/Terragrunt against a local fake AWS ([moto](https://github.com/getmoto/moto)) and a local git module registry |
 | [ansible-lab](ansible-lab/README.md) | ansible-core 2.22: inventories and connections, variable precedence, the 2.19+ templating changes, roles and pinned collections, handlers, rolling deploys (`serial`, canaries, `max_fail_percentage`, `throttle`, `strategy: free`), vault and 2.22 secret masking, ansible-lint, molecule, execution environments, Event-Driven Ansible, the `aws_ec2` inventory, `ansible-test sanity` | 16 learn + 47 incidents | A controller container plus Debian 12 and Rocky 9 nodes with real systemd and sshd (unprivileged), an offline package mirror, a fake AWS (moto) and an EDA activation (ansible-rulebook) |
-| [kubernetes-lab](kubernetes-lab/PLAN.md) | Kubernetes 1.37 on kubeadm: pods and containers, configuration, scheduling, resources and autoscaling, workload controllers, Services and DNS, Ingress and Gateway API, NetworkPolicy and Calico, storage, RBAC and security, the control plane and etcd, nodes and containerd, upgrades and cluster operations, observability, Helm and Argo CD GitOps, secrets (Sealed Secrets, External Secrets + OpenBao, SOPS + age) | 16 learn + 153 incidents | A real kubeadm cluster in 5 VirtualBox VMs (gateway, control plane, 3 workers) next to your Linux VM, created once on the VirtualBox host by a small kit; `./lab` reaches them only over SSH |
+| [kubernetes-lab](kubernetes-lab/README.md) | Kubernetes 1.37 on kubeadm: pods and containers, configuration, scheduling, resources and autoscaling, workload controllers, Services and DNS, Ingress and Gateway API, NetworkPolicy and Calico, storage, RBAC and security, the control plane and etcd, nodes and containerd, upgrades and cluster operations, observability, Helm and Argo CD GitOps, secrets (Sealed Secrets, External Secrets + OpenBao, SOPS + age) | 16 learn + 195 incidents | A real kubeadm cluster in 5 VirtualBox VMs (gateway, control plane, 3 workers) next to your Linux VM, created once on the VirtualBox host by a small kit; `./lab` reaches them only over SSH |
 
 Each lab is self-contained, with its own CLI, machines, network and state. Its README has the
-full scenario list. kubernetes-lab has no README yet: use its `./lab list` and
-[PLAN.md](kubernetes-lab/PLAN.md).
+full scenario list.
 
 ## How it works
 
@@ -69,9 +68,11 @@ cd <lab>
     rulebook activation), `interview` (three random incidents against the clock, scored), `up`/`down`
   - kubernetes-lab: `node` (a shell on a VM), `env` (kubectl, helm, argocd, kubeseal, bao, sops), `ui`
     (Argo CD, Gitea, OpenBao: URLs and credentials), `ticket`, `diff`, `reset`/`status`, `cluster`
-    (`doctor`, `reset`, `golden`, `upgrade`, `rebuild`), `gitops`, `vm`
+    (`doctor`, `reset`, `golden`, `upgrade`, `rebuild`), `gitops`, `vm`, and three practice modes:
+    `interview` (random incidents against the clock), `exam` (CKA style: 8 incidents, 120 min, pass mark 66 %)
+    and `chaos` (a random incident with no ticket)
 - `./lab selftest <id|all>` proves that a scenario fails after setup and passes after the reference fix.
-  kubernetes-lab also takes `learn`, `wave1` or `wave2`.
+  kubernetes-lab also takes `learn`, `wave1`, `wave2` or `wave3`.
 
 **Rules of the game**
 - The ticket's **Test** line ("Done when" in swarm-lab) defines "fixed". The checks also catch
@@ -261,7 +262,7 @@ eval "$(./lab env)"  # kubectl, helm, argocd, kubeseal, bao and sops for the lab
 ├── swarm-lab/            Docker Swarm incidents (20 scenarios)
 ├── terra-labs/           Terraform/Terragrunt learn track (14) and incidents (37)
 ├── ansible-lab/          Ansible learn track (16) and incidents (47)
-├── kubernetes-lab/       Kubernetes learn track (16) and incidents (153) on VirtualBox VMs
+├── kubernetes-lab/       Kubernetes learn track (16) and incidents (195) on VirtualBox VMs
 ├── LICENSE               MIT
 └── .gitignore            keeps generated state, caches and workspaces out of git
 ```
@@ -332,11 +333,12 @@ Lab-specific parts:
 | [ansible-lab/docs/FAULTS.md](ansible-lab/docs/FAULTS.md) | How the faults are built, the environment's fidelity, Ansible surprises found while building |
 | [ansible-lab/docs/CATALOG.md](ansible-lab/docs/CATALOG.md) | Every lab with its root cause (**spoilers**) |
 | [ansible-lab/docs/INTERVIEW-QUESTIONS.md](ansible-lab/docs/INTERVIEW-QUESTIONS.md) | Ansible interview questions, each linked to the lab that practises it |
-| [kubernetes-lab/PLAN.md](kubernetes-lab/PLAN.md) | The lab's guide until it has a README: environment, reset ladder, domains, build history |
+| [kubernetes-lab/README.md](kubernetes-lab/README.md) | Learn track, all 195 incidents, practice modes, rules, safety |
+| [kubernetes-lab/PLAN.md](kubernetes-lab/PLAN.md) | Plan and design decisions: environment, reset ladder, domains, build history and gate results |
 | [kubernetes-lab/docs/HOST-SETUP.md](kubernetes-lab/docs/HOST-SETUP.md) | Creating the VirtualBox VMs with the kit, resource budget, troubleshooting |
 | [kubernetes-lab/docs/FAULTS.md](kubernetes-lab/docs/FAULTS.md) | How the faults are made, the helpers, and how to build your own |
-| [kubernetes-lab/docs/CATALOG.md](kubernetes-lab/docs/CATALOG.md) | Every planned scenario with its root cause (**spoilers**) |
-| [kubernetes-lab/docs/INTERVIEW-QUESTIONS.md](kubernetes-lab/docs/INTERVIEW-QUESTIONS.md) | ~210 Kubernetes interview questions with the key points of a good answer, linked to the labs |
+| [kubernetes-lab/docs/CATALOG.md](kubernetes-lab/docs/CATALOG.md) | Every scenario with its root cause (**spoilers**) |
+| [kubernetes-lab/docs/INTERVIEW-QUESTIONS.md](kubernetes-lab/docs/INTERVIEW-QUESTIONS.md) | ~240 Kubernetes interview questions with the key points of a good answer, linked to the labs |
 | `*/PLAN.md` | Design decisions, research and build history of each lab |
 
 ## Contributing
@@ -351,7 +353,8 @@ Issues and pull requests are welcome, whether new scenarios, fixes or better tic
 3. `./lab selftest <id>` must report `broken:ok fixed:ok`: the check fails after setup and passes
    after the reference fix. Before a release, run `./lab selftest all` (about 15 min for linux-lab,
    25 for swarm-lab, 45 for terra-labs and ~75 for ansible-lab). kubernetes-lab is gated per wave:
-   `./lab selftest wave1` takes ~72 min and `./lab selftest learn` ~29 min.
+   `./lab selftest wave1` takes ~78 min, `wave2` ~105 min, `wave3` ~2 h and `learn` ~30 min; `all` runs overnight
+   (~6 h).
 4. To bump tool versions in terra-labs or ansible-lab, edit `versions.env`, then run `./lab build` and
    `./lab selftest all`. After adding a terra-labs or ansible-lab scenario, regenerate the catalog with
    `python3 tools/catalog.py .`. In kubernetes-lab, edit `versions.env`, run `tools/pin-artifacts.sh`

@@ -206,7 +206,7 @@ X09, all in wave 1.
 | **4 Learn** | T01-T16 | selftest green |
 | **5 Wave 1** (~60) | P/S/N/V/A basics, K01-K04, L01-L06, L11-L14, the 8 research scenarios | selftest green |
 | **6 Wave 2** (92) | C, R, W, G, X, O, Q, rest of K/L/D/Y, P02/P03/V05 + the level-2 rows | selftest green |
-| **7 Wave 3** (~45) | Level 3, B01-B07, interview/exam/chaos | Full selftest within a night |
+| **7 Wave 3** (42) | Level 3, B01-B07, interview/exam/chaos | Full selftest within a night |
 | **8 Docs** | README, CATALOG final, FAULTS.md, INTERVIEW-QUESTIONS, root README | - |
 
 ## 7. Budgets
@@ -638,3 +638,56 @@ Settled on 2026-11-08 by the v2 decisions above.
 - **Phase 6: DONE (2026-11-17).** The PLAN §2 gw description now matches the Docker-free gw (registry :5000 and
   :5001). Next: Phase 7, wave 3 - the 42 remaining rows (35 level-3 incidents + B01-B07), the `rebuild` reset
   for K13, and `./lab interview | exam | chaos`.
+
+### Phase 7 (2026-11-17..18): wave 3 - 42 incidents + practice modes
+
+- **42 incidents** with `wave: 3`: the 35 level-3 rows and the boss fights B01-B07. The catalog is complete:
+  **195 incidents** + 16 learn labs. Batches, each committed once its batch selftest was green:
+  - 7a framework - commit 1d79d9c;
+  - 7b app + config (P14, P16, C07, S05, S10, R09, N08, N13, X05, X08, V06, A09, A10, O10, O11, D12, Y08) -
+    commit 5a51892;
+  - 7c nodes (R07, N12, L07, L08, L17, L18) - commit 049d5a9;
+  - 7d control plane + cluster (N11, X07, A13, O09, K05, K06, K07, K11, K12, K16, Y02) - commits 962c982,
+    6337aa1 (K11);
+  - 7e K13 (kubeadm upgrade 1.36 -> 1.37 without downtime) - commit b169b08;
+  - 7f boss fights (B01-B07) - commits 1b3c521, 6337aa1, fb6f956.
+- **Framework (7a)**:
+  - `lib/modes.sh`: `./lab interview [n] [min]` (ported from ansible-lab), `./lab exam start [min]` (CKA style:
+    one incident per domain group, 120 min, `est:`-weighted, 66 % pass mark) and `./lab chaos start [level]` (no
+    ticket: `chaos ticket` -25 %, `reveal` = 0). Hidden labs (these modes and `start random`) keep the ID out of every
+    output and use `workspace/current/`; the clock pauses during setups; `timed: false` opts a lab out (K13, B06,
+    B07). `tests/modes-selftest.sh`: 23/23 live;
+  - labapp `webhook` (tag 1.7): AdmissionReview v1 over TLS, validate by label, mutate with a per-container
+    JSONPatch; `./lab images build [tag..]` pushes only the named tags, so the older tags keep their digests;
+  - helpers `ns_matrix`, `outage_probe` (a prober on gw - pid files, `pkill -f` matched its own shell),
+    `coredns_count`, `audit_enable`;
+  - doctor (33 checks) also checks every `LABAPP_TAGS` tag in the registry.
+- **Redesigns against the catalog** (written into the rows):
+  - K13: no `rebuild` reset level - T09's pattern, `cluster_bare_build` in setup + the `cluster` reset; the drain is
+    blocked by a PDB with zero allowed disruptions;
+  - K05: a hostPath typo with `type: Directory` (a wrong `--data-dir` alone starts an empty etcd);
+  - K11: quota = live DB size + 10 MiB (bytes, not `64Mi`); X08: a `/29` pool chosen by namespace annotation, `ns`
+    reset + cleanup.sh; L08: tc `prio` + u32 filter + `netem loss 90%` for the API LB only (SSH unaffected);
+    O11: v1 unserved + storage migration (`storedVersions`); S05: `minDomains: 3` on two zones; X07:
+    `can-reach=1.1.1.1` (`first-found` picks the host-only NIC on these VMs); L18: the conntrack cap is the live
+    count + ~4000 (the nodes track ~10k entries at rest).
+- **Fixes on the way** (details in FAULTS.md):
+  - first batch runs: 7b 7/8 + 7/10, 7c 6/6, 7d 9/11, 7f 4/7; every failure a scenario or test bug;
+  - S05 rollouts need `matchLabelKeys: [pod-template-hash]`; A10/S05 counts must skip terminating pods; O10 SSA
+    leaves the old manager co-owning list keys; X08 Calico says *No IPs available in pools*; B02 must break the
+    node before the controller-manager (it sets NotReady); K11 `etcdctl endpoint health` is unhealthy while an alarm
+    is active (the alarm also survives the restart); B01 a jq precedence bug;
+  - the **etcd restore runbook** (K06, B06): restore, restart every kubelet and the calico-node / kube-proxy
+    DaemonSets (their watches stall on the rewound store), force-delete the ghost pods the snapshot brought back;
+  - cluster-scoped objects the student re-applies lose the lab label - cleanup.sh deletes them by name.
+- **A VM snapshot restore removed labapp:1.7 from the registry** (its storage is not in the golden): the first gate
+  attempt failed A09/A10 until `./lab images build 1.7` - hence the new doctor check.
+- **Gate** (in progress): `./lab selftest wave3` twice in a row on 2026-11-18 - 12:53-14:51 UTC **42/42** and
+  14:51-16:47 UTC **42/42**, no fixes in between. `./lab selftest all` from 16:47 was stopped for the day at P06
+  (20:30 UTC): **127 passed, 2 failed** - B07 (intermittent: an automated sync that failed while the repo was
+  unreachable is never retried; the fix now syncs the apps and waits for the SealedSecret) and K09 (wave 2; A13/O09
+  now leave audit logs on cp1 that the reset doesn't clear - setup clears them, verify greps). Still to do: B07 and
+  K09 x3, a complete `selftest all`, doctor.
+- **Timings** (wave3 runs; each lab's time includes the cleanup of the lab before it): 115-117 min for 42 labs - 9 labs
+  <= 60 s, 9 take 61-120 s, 24 take > 120 s; the slowest: K13 576 s, R09 483 s, K07 410 s, B06 368 s, L17 362 s,
+  Y08 356 s, L08 309 s, K06 299 s, K11 287 s.
