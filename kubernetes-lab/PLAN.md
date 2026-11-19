@@ -207,7 +207,7 @@ X09, all in wave 1.
 | **5 Wave 1** (~60) | P/S/N/V/A basics, K01-K04, L01-L06, L11-L14, the 8 research scenarios | selftest green |
 | **6 Wave 2** (92) | C, R, W, G, X, O, Q, rest of K/L/D/Y, P02/P03/V05 + the level-2 rows | selftest green |
 | **7 Wave 3** (42) | Level 3, B01-B07, interview/exam/chaos | Full selftest within a night |
-| **8 Docs** | README, CATALOG final, FAULTS.md, INTERVIEW-QUESTIONS, root README | - |
+| **8 Docs** | README, CATALOG final, FAULTS.md, INTERVIEW-QUESTIONS, root README | done |
 
 ## 7. Budgets
 
@@ -682,12 +682,32 @@ Settled on 2026-11-08 by the v2 decisions above.
   - cluster-scoped objects the student re-applies lose the lab label - cleanup.sh deletes them by name.
 - **A VM snapshot restore removed labapp:1.7 from the registry** (its storage is not in the golden): the first gate
   attempt failed A09/A10 until `./lab images build 1.7` - hence the new doctor check.
-- **Gate** (in progress): `./lab selftest wave3` twice in a row on 2026-11-18 - 12:53-14:51 UTC **42/42** and
-  14:51-16:47 UTC **42/42**, no fixes in between. `./lab selftest all` from 16:47 was stopped for the day at P06
-  (20:30 UTC): **127 passed, 2 failed** - B07 (intermittent: an automated sync that failed while the repo was
-  unreachable is never retried; the fix now syncs the apps and waits for the SealedSecret) and K09 (wave 2; A13/O09
-  now leave audit logs on cp1 that the reset doesn't clear - setup clears them, verify greps). Still to do: B07 and
-  K09 x3, a complete `selftest all`, doctor.
+- **Gate: PASSED (2026-11-19)**, accepted with one test-only failure (as D09 in Phase 6):
+  - `./lab selftest wave3` twice in a row on 2026-11-18 - 12:53-14:51 UTC **42/42** and 14:51-16:47 UTC **42/42**,
+    no fixes in between;
+  - a first `./lab selftest all` that evening was stopped at P06 (127 passed): B07 failed intermittently (an
+    automated sync that failed while the repo was unreachable is never retried - the fix now syncs the apps and
+    waits for the SealedSecret) and K09 (A13/O09 leave audit logs that no reset clears - setup clears them, verify
+    greps); both 3/3 afterwards (365b3b3);
+  - `./lab selftest all` 2026-11-19 11:12-16:39 UTC: **210/211** - learn 16/16 (28 min), wave1 61/61 (79 min),
+    wave2 92/92 (104 min), wave3 41/42 (114 min), 5 h 27 min in all. Y01 (wave 1) failed once: right after a
+    rotation one pod still served the old token, and the check ran once. Its token checks now require six
+    consistent answers, eventually; then `./lab selftest Y01 Y01 Y01`: 3/3;
+  - `./lab cluster doctor`: PASS (33 checks).
 - **Timings** (wave3 runs; each lab's time includes the cleanup of the lab before it): 115-117 min for 42 labs - 9 labs
   <= 60 s, 9 take 61-120 s, 24 take > 120 s; the slowest: K13 576 s, R09 483 s, K07 410 s, B06 368 s, L17 362 s,
   Y08 356 s, L08 309 s, K06 299 s, K11 287 s.
+- **Phase 7: DONE (2026-11-19).** The catalog is complete: 195 incidents in 17 domains + 16 learn labs, all selftested
+  in one night-length run.
+
+### Phase 8 (2026-11-18..19): docs
+
+- `README.md` for kubernetes-lab (the cluster, setup, quick start, practice modes, how to play, rules, safety,
+  maintenance); its learn and incident tables are generated from the scenarios by `tools/tables.py --readme`.
+- `docs/CATALOG.md`: every row describes the scenario as built; the header says so.
+- `docs/FAULTS.md`: the gotchas grouped under five headings (scripting, Kubernetes behaviour, networking and
+  storage on these VMs, GitOps and secrets, control plane and recovery).
+- `docs/INTERVIEW-QUESTIONS.md`: section 20, 34 questions from the wave 2-3 incidents (242 in total).
+- The root README: 325 incidents, kubernetes-lab's README, the practice modes, wave3, selftest timings.
+- **Phase 8: DONE (2026-11-19). The build plan is complete.** Maintenance from here: `./lab cluster doctor` after any
+  VM snapshot restore, `./lab selftest all` after version bumps.
