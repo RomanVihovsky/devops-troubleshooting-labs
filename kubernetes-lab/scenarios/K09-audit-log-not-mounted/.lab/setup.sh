@@ -1,6 +1,7 @@
 # K09: audit flags + the policy mounted, but no hostPath for the log directory -> "no such file or directory"
 nxi "$CP" >/dev/null <<'__X__'
 set -eu
+rm -f /var/log/kubernetes/audit/audit*.log      # leftovers of other audit labs (A13, O09)
 mkdir -p /etc/kubernetes/audit
 cat > /etc/kubernetes/audit/policy.yaml <<'EOF2'
 apiVersion: audit.k8s.io/v1

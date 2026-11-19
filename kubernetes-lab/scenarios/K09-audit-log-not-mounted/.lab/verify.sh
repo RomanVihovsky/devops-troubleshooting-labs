@@ -9,7 +9,7 @@ fresh_event() {
   local t; t=$(nx "$CP" "date -u +%FT%T" </dev/null)   # the node's clock: the events carry its time
   kx -n shop get secret shop-secrets >/dev/null 2>&1 || return 1
   sleep 3
-  nx "$CP" "tail -n 400 /var/log/kubernetes/audit/audit.log 2>/dev/null" </dev/null \
+  nx "$CP" "grep -h shop-secrets /var/log/kubernetes/audit/audit.log 2>/dev/null | tail -n 50" </dev/null \
     | jq -e --arg t "$t" 'select(.objectRef.resource == "secrets" and .objectRef.name == "shop-secrets" and .requestReceivedTimestamp >= $t)' >/dev/null
 }
 check_eventually 180 "the API answers (/readyz)" api_up

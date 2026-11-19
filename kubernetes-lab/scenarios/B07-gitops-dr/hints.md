@@ -11,4 +11,5 @@ the service (Y06). Then read the repo password: `bao kv get -mount=secret ci/git
 ## Hint 3
 Repo Secret `argocd/repo-gitops` (label `argocd.argoproj.io/secret-type=repository`, `url`, `username`, `password`,
 `type: git`); root app `targetRevision: main`; `kubectl apply -f .state/sealed-secrets-key.yaml` + restart the
-controller (Y02); then refresh the apps and force-sync the ExternalSecrets.
+controller (Y02); then refresh **and sync** the apps (an automated sync that failed while the repo was unreachable is not retried
+for the same revision) and force-sync the ExternalSecrets.

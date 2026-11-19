@@ -103,74 +103,65 @@ escalates to a full `cluster reset` by itself.
 | `gitea_argocd_user` / `argo_repo_secret` | Argo CD's Gitea account (password back to `.state/gitea/argocd-password`) / its repo Secret |
 | `eso_store_restore` | the caProvider ConfigMap `external-secrets/lab-ca` + ClusterSecretStore `openbao` as built |
 
-Gotchas:
+### Gotchas
+
+#### Scripting and the lab framework
+
 - **`check_eventually 60 "x" test "$(cmd)" = y` evaluates `$(cmd)` once.** Wrap it in a function.
-- **Egress device rules go in POSTROUTING.** In the nftables OUTPUT hook, `oifname` is the device chosen
-  *before* kube-proxy's DNAT re-routes a packet. Host → 10.96.0.1 first routes via the NAT NIC, so an
-  output-hook "drop enp0s3" kills the node's own API calls and Calico CNI fails.
-- **The desktop reaches the VMs through VirtualBox NAT.** Nodes see it as **192.168.56.1**; a partition
-  fault must keep that address, or `./lab` loses the node.
 - **In selftest's "broken" pass, `LAB_EXPECT_FAIL=1` shortens `check_eventually` to 3 s.** Setup must wait
   until the broken state really exists (e.g. node NotReady, app OutOfSync) before it returns.
-- **Never leave files under `/etc/kubernetes/manifests`** except the 4 control-plane manifests: kubelet
-  runs every file there.
-- **An Argo CD sync only reverts what Git declares.** A field added by hand that Git never had (an extra env
-  var, label or annotation) survives a sync and self-heal, and the app still says Synced. If a GitOps
-  scenario's setup adds one, its solve and hints must remove it explicitly (D02).
-- **`cleanup.sh` is for shared state the reset level doesn't own**: Node labels (S02), the default
-  StorageClass annotation (V02), NetworkPolicies in namespaces the scenario doesn't own (X09), static PVs
-  and their NFS directories (V03), a Role in `default` (A01).
 - **Selftest output belongs in `.state/`, not `/tmp`.** The desktop's `/tmp` is wiped at boot.
   `./lab selftest` appends every result line to `.state/selftest.log`. It keeps a failed setup's log as
   `.state/selftest-setup-<ID>.log`. A `set -e` setup/solve prints `✘ line N: exit X: <command>` when a command
   other than `die` stops it.
-- **"Ready" is not "stable".** A pod killed every ~40 s by a bad liveness probe is Ready between kills, and
-  a crash-looping container is `running` or `terminated` most of the time. Poll `crashlooping`, not
-  the waiting reason, and check stability with `stable_for` (which looks back), not with readiness (P04, P09).
+- **No `yq` in lab scripts.** The desktop's `yq` is a snap that doesn't run here. Use python3 + PyYAML (as `ka`
+  does) or jq on `-o json`.
+- **Setups run with `pipefail`**: `kx ... | grep -q X` fails whenever kx fails, even when grep matched (K17 waited
+  for an x509 error that `kx` reports by failing). Capture first: `o=$(kx ... 2>&1) || true; grep -q X <<<"$o"`.
+- **jq 1.6 (the desktop's) exits 0 for `-e` on empty input** (jq 1.7 exits 4). `pods_get ... | jq -e '.x'` is "true"
+  when every request timed out and nothing was printed (X01's setup never saw the fault). For output that may be
+  empty, slurp and count: `jq -se 'length > 0 and all(.[]; ...)'`.
 - **busybox >= 1.29 `nslookup <short name>` exits 1** when any search domain answers NXDOMAIN, even though
   the name resolves. Use FQDNs or dotted names in checks, and `labapp wait-for` in init containers (P12).
   busybox 1.37 `wget` does https.
-- **The API server pretty-prints JSON for curl/wget user agents**: match `"kind": *"PodList"`, not
-  `"kind":"PodList"` (A03).
-- **Changing a scheduling constraint can deadlock the rollout.** Required pod anti-affinity is symmetric: the
-  old pods repel the new ones, and the old ReplicaSet can't shrink below `replicas - maxUnavailable`. The
-  solve must remove the old ReplicaSet (S04). A `DoNotSchedule` topology spread counts the tainted
-  control plane as an empty domain unless `nodeTaintsPolicy: Honor`.
-- **Don't assume a fault without checking what the node falls back to.** Without `--node-ip` the kubelet
-  resolves its hostname first (`/etc/hosts` maps it to the host-only IP). Only a loopback answer makes it use
-  the default-route NIC (L06). Read the kubelet's fallback order before emulating a "lost flag".
 - **busybox `wget -S` adds a last line on errors**: `wget: server returned error: HTTP/1.1 502 ...`. `http_code`
   reads only the status header line (`^ *HTTP/`); before Phase 6 it returned 0 for every 4xx/5xx.
-- **No `yq` in lab scripts.** The desktop's `yq` is a snap that doesn't run here. Use python3 + PyYAML (as `ka`
-  does) or jq on `-o json`.
-- **GitOps reset races**: `lab-apps`' prune can fail on an Application the reset is deleting ("... not found"),
-  and auto-sync never retries a failed revision. The reset re-syncs the root until it converges
-  (`root_converged`). Without that the next start saw an unhealthy cluster and did a full reset (D08).
-- **Hooks and their dependencies**: Argo CD runs PreSync hooks before any Sync-phase object exists, and that
-  includes the chart's own ServiceAccount (D09: the Job couldn't even create its pod). Hook resources carry
-  `argocd.argoproj.io/hook-finalizer`: when the app is deleted, strip it, or the namespace hangs in Terminating.
-- **Traefik vs ingress-nginx error codes**: a wrong backend Service port → Traefik skips the route (404 + "service
-  port not found" in its log); no ready endpoints → 503 (`allowEmptyServices`). Traefik serves several Gateways
-  on one entrypoint (G05 has its own Gateway on `web:8000`).
-- **Probe pods and ReplicaSets**: a policy probe must not carry the labels a ReplicaSet selects (it would be
-  adopted). Select with a label the RS doesn't use (X10 uses `app.kubernetes.io/component`), or give the
-  workload an extra selector label (X02's `tier: x02`).
-- **Setups run with `pipefail`**: `kx ... | grep -q X` fails whenever kx fails, even when grep matched (K17 waited
-  for an x509 error that `kx` reports by failing). Capture first: `o=$(kx ... 2>&1) || true; grep -q X <<<"$o"`.
-- **Open connections hide faults**: a haproxy `reload` keeps established connections on the old process, and
-  TLS validity is checked only at the handshake. The kubelets' long-lived connections kept working after a bad
-  LB backend (K14) or a clock 400 days back (L16) until something restarted them.
-- **NFS checks groups on the server** (`rpc.mountd --manage-gids` on Ubuntu): `fsGroup` is only a supplementary
-  group, so a pod writes to an NFS volume only if `runAsGroup` (the primary group) matches the directory's group
-  (V05, V07).
+- **The API server pretty-prints JSON for curl/wget user agents**: match `"kind": *"PodList"`, not
+  `"kind":"PodList"` (A03).
 - **`kubectl run --rm -i` can attach late**: a probe pod that finishes fast loses its first lines. Let it `sleep 2`
   before it prints, and don't require an exact count of lines (W03).
 - **Check state, don't trigger it**: a setup that tests "undo is impossible" by running `rollout undo` repairs the
   lab if the check runs too early. Use `--dry-run=server` (W11), and wait for the exact state (the 1.5 ReplicaSet,
   not "one ReplicaSet").
-- **Helm 4 applies server-side**: after a hand patch (`kubectl patch` = field manager `kubectl-patch`), a plain
-  `helm upgrade` fails with a conflict and leaves the release `failed`. `helm_up` passes `--force-conflicts`, so
-  re-applying an add-on from its golden values always wins (R02's cleanup).
+- **Probe pods and ReplicaSets**: a policy probe must not carry the labels a ReplicaSet selects (it would be
+  adopted). Select with a label the RS doesn't use (X10 uses `app.kubernetes.io/component`), or give the
+  workload an extra selector label (X02's `tier: x02`).
+- **`pkill -f` matches its own shell** when the pattern appears in the command line: use pid files (`outage_probe`).
+- **Count live pods, not `phase=Running`**: during a rollout the old pods are still Running while terminating.
+  Filter `metadata.deletionTimestamp == null` (S05, A10).
+- **"Ready" is not "stable".** A pod killed every ~40 s by a bad liveness probe is Ready between kills, and
+  a crash-looping container is `running` or `terminated` most of the time. Poll `crashlooping`, not
+  the waiting reason, and check stability with `stable_for` (which looks back), not with readiness (P04, P09).
+- **`cleanup.sh` is for shared state the reset level doesn't own**: Node labels (S02), the default
+  StorageClass annotation (V02), NetworkPolicies in namespaces the scenario doesn't own (X09), static PVs
+  and their NFS directories (V03), a Role in `default` (A01).
+- **Cluster-scoped objects the student re-applies lose the lab label**: a PriorityClass, a CRD, an IPPool or a
+  StorageClass applied from a workspace file without the label survives the label sweep. Delete them by name in
+  `cleanup.sh` (S10, O11, X08, D12) - remember `cleanup.sh` is skipped at reset level `cluster`.
+- **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
+  match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
+  the binary for the string when in doubt.
+- **Audit logs survive every reset**: `/var/log/kubernetes/audit` is not in the golden. A lab that reads the
+  audit log clears it first (`audit_enable` does; K09's setup too) - A13/O09 leave theirs behind.
+
+#### Kubernetes behaviour the scenarios rely on
+
+- **Changing a scheduling constraint can deadlock the rollout.** Required pod anti-affinity is symmetric: the
+  old pods repel the new ones, and the old ReplicaSet can't shrink below `replicas - maxUnavailable`. The
+  solve must remove the old ReplicaSet (S04). A `DoNotSchedule` topology spread counts the tainted
+  control plane as an empty domain unless `nodeTaintsPolicy: Honor`.
+- **Rolling updates and topology spread**: without `matchLabelKeys: [pod-template-hash]` the new ReplicaSet spreads
+  around the old pods and can end up uneven (S05).
 - **A Deployment deletes old ReplicaSets only when a rollout completes.** With a crashing new version the old
   ReplicaSet stays, whatever `revisionHistoryLimit` says, and `rollout undo` still works. A "no history" lab
   needs a release that rolls out completely and breaks at runtime (W11).
@@ -180,16 +171,57 @@ Gotchas:
   restart). An eviction threshold "free + 300Mi", measured once, sometimes evicted nothing, and a bigger margin
   would outlast the victim's ~600 MiB and evict other pods. Measure, set, wait for the eviction, and re-measure
   if none came (R04).
-- **Cluster-scoped objects the student re-applies lose the lab label**: a PriorityClass, a CRD, an IPPool or a
-  StorageClass applied from a workspace file without the label survives the label sweep. Delete them by name in
-  `cleanup.sh` (S10, O11, X08, D12) - remember `cleanup.sh` is skipped at reset level `cluster`.
-- **Count live pods, not `phase=Running`**: during a rollout the old pods are still Running while terminating.
-  Filter `metadata.deletionTimestamp == null` (S05, A10).
 - **Server-side apply after `--force-conflicts`**: the old manager loses the value but may keep co-owning a list
   item's key (`f:name`) - check `f:value`, not the whole `f:env` (O10).
+- **Helm 4 applies server-side**: after a hand patch (`kubectl patch` = field manager `kubectl-patch`), a plain
+  `helm upgrade` fails with a conflict and leaves the release `failed`. `helm_up` passes `--force-conflicts`, so
+  re-applying an add-on from its golden values always wins (R02's cleanup).
+- **Don't assume a fault without checking what the node falls back to.** Without `--node-ip` the kubelet
+  resolves its hostname first (`/etc/hosts` maps it to the host-only IP). Only a loopback answer makes it use
+  the default-route NIC (L06). Read the kubelet's fallback order before emulating a "lost flag".
+
+#### Networking and storage on these VMs
+
+- **Egress device rules go in POSTROUTING.** In the nftables OUTPUT hook, `oifname` is the device chosen
+  *before* kube-proxy's DNAT re-routes a packet. Host → 10.96.0.1 first routes via the NAT NIC, so an
+  output-hook "drop enp0s3" kills the node's own API calls and Calico CNI fails.
+- **The desktop reaches the VMs through VirtualBox NAT.** Nodes see it as **192.168.56.1**; a partition
+  fault must keep that address, or `./lab` loses the node.
 - **Calico autodetection on these VMs**: `first-found` picks the host-only NIC; `can-reach=<internet IP>` follows the
   default route to the NAT NIC (`10.0.2.15`, the same on every VM) (X07). IPPools are CRD-only
   (`crd.projectcalico.org/v1`, no defaulting); exhaustion says *No IPs available in pools* (X08).
+- **Traefik vs ingress-nginx error codes**: a wrong backend Service port → Traefik skips the route (404 + "service
+  port not found" in its log); no ready endpoints → 503 (`allowEmptyServices`). Traefik serves several Gateways
+  on one entrypoint (G05 has its own Gateway on `web:8000`).
+- **Open connections hide faults**: a haproxy `reload` keeps established connections on the old process, and
+  TLS validity is checked only at the handshake. The kubelets' long-lived connections kept working after a bad
+  LB backend (K14) or a clock 400 days back (L16) until something restarted them.
+- **NFS checks groups on the server** (`rpc.mountd --manage-gids` on Ubuntu): `fsGroup` is only a supplementary
+  group, so a pod writes to an NFS volume only if `runAsGroup` (the primary group) matches the directory's group
+  (V05, V07).
+- **A VM snapshot restore rolls the registry back**: its storage is not in the golden, so a labapp tag pushed
+  after the snapshot is gone (A09/A10 failed without a word). `./lab cluster doctor` checks every `LABAPP_TAGS`
+  tag; `./lab images build <tag>` puts one back.
+
+#### GitOps and secrets
+
+- **An Argo CD sync only reverts what Git declares.** A field added by hand that Git never had (an extra env
+  var, label or annotation) survives a sync and self-heal, and the app still says Synced. If a GitOps
+  scenario's setup adds one, its solve and hints must remove it explicitly (D02).
+- **GitOps reset races**: `lab-apps`' prune can fail on an Application the reset is deleting ("... not found"),
+  and auto-sync never retries a failed revision. The reset re-syncs the root until it converges
+  (`root_converged`). Without that the next start saw an unhealthy cluster and did a full reset (D08).
+- **Hooks and their dependencies**: Argo CD runs PreSync hooks before any Sync-phase object exists, and that
+  includes the chart's own ServiceAccount (D09: the Job couldn't even create its pod). Hook resources carry
+  `argocd.argoproj.io/hook-finalizer`: when the app is deleted, strip it, or the namespace hangs in Terminating.
+- **A failed automated sync is never retried for the same revision**: an app that tried to sync while its repo
+  was unreachable stays failed after the credentials are back - sync it explicitly (B07, and `root_converged` in
+  the reset).
+
+#### Control plane, etcd and recovery
+
+- **Never leave files under `/etc/kubernetes/manifests`** except the 4 control-plane manifests: kubelet
+  runs every file there.
 - **etcd NOSPACE**: after raising the quota, wait for the **new** etcd process before `alarm disarm` - the old one
   re-raises the alarm at once, and the alarm is persisted across the restart. `etcdctl endpoint health` reports
   *unhealthy* while any alarm is active - wait with `endpoint status` (K11). haproxy drops the API server for a few
@@ -201,15 +233,6 @@ Gotchas:
   kubelets terminated those UIDs and never restart them (`exec`: *pod does not exist*; a kubelet restart revives the
   container, not its network). Force-delete them (`--grace-period=0 --force`: a graceful delete hangs in Terminating, no kubelet confirms it); verify with `pods_get` /
   `exec`, never with `deploy_ready` alone (K06, B06).
-- **`pkill -f` matches its own shell** when the pattern appears in the command line: use pid files (`outage_probe`).
-- **Rolling updates and topology spread**: without `matchLabelKeys: [pod-template-hash]` the new ReplicaSet spreads
-  around the old pods and can end up uneven (S05).
-- **jq 1.6 (the desktop's) exits 0 for `-e` on empty input** (jq 1.7 exits 4). `pods_get ... | jq -e '.x'` is "true"
-  when every request timed out and nothing was printed (X01's setup never saw the fault). For output that may be
-  empty, slurp and count: `jq -se 'length > 0 and all(.[]; ...)'`.
-- **Check error texts against the running version.** Argo CD 3.5 reports a denied destination as "do not
-  match any of the allowed destinations"; "not permitted" is the repo/resource-kind check (D04). `grep -a`
-  the binary for the string when in doubt.
 
 Lab images beyond labapp (`LAB_IMAGES` in `versions.env`, mirrored by gw's `sync.sh`; `<path>=<ref>[%platform]`):
 `lab/redis:7-alpine`, `lab/postgres:16-alpine`, `lab/nginx:1.30-alpine`, and `lab/labapp:1.6`, an **arm64**

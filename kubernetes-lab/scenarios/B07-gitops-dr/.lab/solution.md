@@ -11,7 +11,9 @@
 4. **Sealing key regenerated** - restore `.state/sealed-secrets-key.yaml`, restart the controller; SealedSecrets in
    Git decrypt again without re-sealing (Y02).
 
-Then refresh the apps and force-sync the ExternalSecrets; `demo` and `shop` recover by themselves.
+Then refresh **and sync** the apps - Argo CD never retries an automated sync that failed for the same revision, so
+an app whose sync failed while the repo was unreachable stays failed until someone syncs it - and force-sync the
+ExternalSecrets.
 
 **Interview notes**
 - A GitOps cluster's DR inventory: Git (source of truth), the repo credentials, the sealing key / KMS key, the secret
