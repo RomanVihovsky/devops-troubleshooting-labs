@@ -1,0 +1,9 @@
+id: N13
+title: An ExternalName alias breaks TLS and virtual hosts
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 20m
+reset: ns
+namespaces: [frontend, vendor]

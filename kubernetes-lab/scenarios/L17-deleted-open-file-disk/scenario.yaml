@@ -1,0 +1,10 @@
+id: L17
+title: k8s-w2 under DiskPressure, but du finds nothing big
+kind: incident
+level: 3
+domain: nodes
+wave: 3
+est: 30m
+reset: node
+nodes: [w2]
+namespaces: [audit]

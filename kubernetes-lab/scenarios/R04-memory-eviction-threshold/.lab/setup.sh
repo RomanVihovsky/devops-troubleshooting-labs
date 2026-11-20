@@ -35,10 +35,15 @@ spec:
           env: [{name: CACHE_MB, value: "600"}]      # BestEffort + the most memory: the kubelet's first victim
 YML
 wait_rollout payments deploy/payments-api; wait_rollout payments deploy/batch-cache
-avail=$(kx get --raw /api/v1/nodes/k8s-w2/proxy/stats/summary | jq '.node.memory.availableBytes / 1048576 | floor')
-thr="$(( (avail + 300) / 100 * 100 ))Mi"
-remember r04_threshold "$thr"
-nxi k8s-w2 >/dev/null <<__X__
+evicted() { local o; o=$(kx -n payments get events -o jsonpath='{.items[*].message}' 2>/dev/null) || true; grep -q 'low on resource: memory' <<<"$o"; }
+# Free memory drifts (page cache moves between active and inactive), so a fixed margin can miss. Measure, set the
+# threshold 300-400Mi above it (evicting batch-cache frees ~600Mi, so the pressure then ends) and re-measure if
+# nothing was evicted
+for try in 1 2 3 4; do
+  [ "$try" = 1 ] || sleep 20                       # fresh stats after the kubelet restart
+  avail=$(kx get --raw /api/v1/nodes/k8s-w2/proxy/stats/summary | jq '.node.memory.availableBytes / 1048576 | floor')
+  thr="$(( (avail + 399) / 100 * 100 ))Mi"
+  nxi k8s-w2 >/dev/null <<__X__
 set -eu
 python3 - <<'PY'
 import yaml
@@ -48,5 +53,8 @@ yaml.safe_dump(d, open(f, "w"), sort_keys=False)
 PY
 systemctl restart kubelet
 __X__
-evicted() { kx -n payments get events -o jsonpath='{.items[*].message}' 2>/dev/null | grep -q 'low on resource: memory'; }
-retry 240 evicted || die "nothing was evicted"
+  retry 90 evicted && break
+  [ "$try" -lt 4 ] || die "nothing was evicted (last threshold $thr)"
+  echo "  no eviction at $thr (free memory moved), re-measuring" >&2
+done
+remember r04_threshold "$thr"

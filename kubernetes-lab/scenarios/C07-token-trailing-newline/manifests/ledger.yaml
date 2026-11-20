@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: partner-gw, namespace: ledger}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: partner-gw}}
+  template:
+    metadata: {labels: {app: partner-gw}}
+    spec:
+      containers:
+        - name: gw
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: partner-gw}
+            - {name: AUTH_TOKEN_FILE, value: /etc/gw/token}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          volumeMounts: [{name: token, mountPath: /etc/gw, readOnly: true}]
+      volumes:
+        - name: token
+          secret: {secretName: gw-token}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: partner-gw, namespace: ledger}
+spec:
+  selector: {app: partner-gw}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ledger, namespace: ledger}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: ledger}}
+  template:
+    metadata: {labels: {app: ledger}}
+    spec:
+      containers:
+        - name: ledger
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: ledger}
+            - {name: UPSTREAM_URL, value: "http://partner-gw.ledger.svc:8080/items"}
+            - {name: UPSTREAM_REQUIRED, value: "true"}
+            - {name: UPSTREAM_TOKEN_FILE, value: /etc/partner/token}
+          readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 3}
+          volumeMounts: [{name: partner, mountPath: /etc/partner, readOnly: true}]
+      volumes:
+        - name: partner
+          secret: {secretName: partner-token}

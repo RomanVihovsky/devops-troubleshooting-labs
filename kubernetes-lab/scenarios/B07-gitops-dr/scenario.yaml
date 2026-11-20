@@ -1,0 +1,11 @@
+id: B07
+title: 'GitOps DR: after the "rebuild" nothing comes back'
+kind: incident
+level: 3
+domain: boss
+wave: 3
+est: 60m
+reset: cluster
+timed: false
+openbao: true
+namespaces: []

@@ -263,6 +263,7 @@ cluster_doctor() {
   check "node clocks within 1 s (chrony from k8s-gw)" clocks_ok
   check "API server cert valid > 300 days ($(cert_days) left)" test "$(cert_days)" -gt 300
   check "private registry registry.lab:5001 (401 anonymous, user ci can read)" private_registry_ok
+  check "lab registry has every labapp tag ($LABAPP_TAGS)" labapp_tags_ok
   gitops_checks
   doctor_cleanup || warn "namespace lab-doctor still terminating"
   verdict

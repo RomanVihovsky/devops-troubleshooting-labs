@@ -1,0 +1,9 @@
+id: N11
+title: A new Service is unreachable - but only from pods on k8s-w2
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 25m
+reset: cluster
+namespaces: [pricing]

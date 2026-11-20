@@ -1,0 +1,9 @@
+id: A13
+title: Who read the payments API key?
+kind: incident
+level: 3
+domain: security
+wave: 3
+est: 30m
+reset: cluster
+namespaces: [payments, ci, partners-int]

@@ -1,0 +1,9 @@
+id: O11
+title: A CRD upgrade broke every client that still uses v1
+kind: incident
+level: 3
+domain: operations
+wave: 3
+est: 25m
+reset: ns
+namespaces: [factory]

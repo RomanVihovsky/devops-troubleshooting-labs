@@ -1,0 +1,9 @@
+id: K12
+title: Approved CSRs never get a certificate
+kind: incident
+level: 3
+domain: control-plane
+wave: 3
+est: 20m
+reset: cluster
+namespaces: []

@@ -1,0 +1,9 @@
+id: O09
+title: Who deleted the feature flags ConfigMap?
+kind: incident
+level: 3
+domain: operations
+wave: 3
+est: 25m
+reset: cluster
+namespaces: [checkout]

@@ -1,0 +1,9 @@
+id: B01
+title: 'Black Friday: the storefront is down'
+kind: incident
+level: 3
+domain: boss
+wave: 3
+est: 45m
+reset: ns
+namespaces: [bf]

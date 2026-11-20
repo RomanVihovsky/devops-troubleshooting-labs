@@ -7,4 +7,4 @@
 `scratch` is a one-off debugging pod from last week (fine to lose). Drain the node, then return it to service.
 
 **Test**: `cache`'s pod and the `scratch` pod that ran on `k8s-w2` are gone (evicted); `k8s-w2` is schedulable again;
-`cache` has 2 Ready pods and `node-agent` runs on every worker.
+`cache` has 3 Ready pods (one per worker) and `node-agent` runs on every worker.

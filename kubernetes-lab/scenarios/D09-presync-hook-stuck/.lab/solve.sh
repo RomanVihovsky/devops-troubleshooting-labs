@@ -8,11 +8,10 @@ pre = {
     "argocd.argoproj.io/hook-delete-policy": "BeforeHookCreation",
     "argocd.argoproj.io/sync-wave": "-1",
 }
-v["secrets"]["sealedSecret"]["annotations"] = dict(pre)
 v.setdefault("config", {})["annotations"] = dict(pre)
 open(p, "w").write(yaml.safe_dump(v, sort_keys=False))
 PY
-git -C "$W" commit -qam "billing: the migration's ConfigMap and SealedSecret are PreSync hooks before it (INC-2340)"
+git -C "$W" commit -qam "billing: the migration's ConfigMap is a PreSync hook before it (INC-2340)"
 git -C "$W" push -q origin main 2>/dev/null
 # argocd app terminate-op = set the running operation's phase to Terminating (the CRD has no status subresource)
 kx -n argocd patch application billing --type merge -p '{"status":{"operationState":{"phase":"Terminating"}}}' >/dev/null

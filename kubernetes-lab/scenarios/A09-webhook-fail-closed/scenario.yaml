@@ -1,0 +1,9 @@
+id: A09
+title: 'Nothing can be created in namespace orders: "failed calling webhook"'
+kind: incident
+level: 3
+domain: security
+wave: 3
+est: 25m
+reset: ns
+namespaces: [orders, policy-system]

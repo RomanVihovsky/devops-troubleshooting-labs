@@ -1,0 +1,10 @@
+id: R07
+title: '"can''t start new thread" - but only on k8s-w1'
+kind: incident
+level: 3
+domain: resources
+wave: 3
+est: 25m
+reset: node
+nodes: [w1]
+namespaces: [reports]

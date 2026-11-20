@@ -1,4 +1,4 @@
-# Kubernetes interview question bank (~210)
+# Kubernetes interview question bank (~242)
 
 Each question has the **key points** a strong answer covers. Lab scenario IDs in brackets
 show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M) mid, (S) senior/SRE.
@@ -271,6 +271,43 @@ show where you can practise it hands-on (see CATALOG.md). Levels: (J) junior, (M
 208. Temporary debug pod - `kubectl run tmp --rm -it --image=nicolaka/netshoot -- bash`
 
 ---
+
+## 20. Lessons from the incidents (wave 2-3)
+
+209. **A Job's work is done but the Job never completes. Why, and the modern fix?** (M) - a regular sidecar (log shipper) never exits, a pod succeeds only when all containers exit; native sidecar = init container with `restartPolicy: Always` (GA 1.33); Job templates are immutable - delete/recreate. [P14]
+210. **Rolling updates drop a few requests per replaced pod. What's happening and how do you fix it?** (S) - SIGTERM and endpoint removal start in parallel; app exits before kube-proxy/ingress stop routing; `preStop` sleep (or `lifecycle.preStop.sleep`) within the grace period, or a graceful app that keeps accepting briefly; maxUnavailable 0 + readiness protect the start, preStop the end. [P16]
+211. **A token works with curl from a laptop but is rejected from the pod. Where do you look?** (M) - the bytes: `--from-file` keeps the trailing newline, `$(cat ...)` strips it; `od -c`; `--from-literal`, `printf %s`, `stringData` with `|-`. [C07]
+212. **Pods are Pending with 'didn't match pod topology spread constraints' although nodes are idle.** (S) - minDomains > existing domains makes the global minimum 0; nodeAffinityPolicy/nodeTaintsPolicy decide which nodes count; `matchLabelKeys: [pod-template-hash]` for even rollouts; ScheduleAnyway trades the guarantee away. [S05]
+213. **A high-priority batch Job keeps evicting your web pods. Options?** (M) - PriorityClass preemption; `preemptionPolicy: Never` (immutable - recreate the class), or a higher class for web; PDBs are only best-effort for preemption. [S10]
+214. **The HPA scales up and down every minute. Which knob?** (M) - `behavior.scaleDown.stabilizationWindowSeconds` (default 300) - the max recommendation of the window; policies limit step size; tolerance 10 %; flapping costs warm-ups. [R09]
+215. **Every external call from a pod produces several NXDOMAINs in CoreDNS. Explain and fix.** (M) - `ndots:5` + search domains: names with fewer dots try every search domain (A + AAAA each) first; FQDN with a trailing dot or `dnsConfig.options ndots`; NodeLocal DNSCache; musl differences. [N08]
+216. **An ExternalName Service breaks HTTPS to the backend. Why?** (S) - it's only a CNAME - the client still sends SNI/Host for the alias and verifies the cert for it; vhosts reject it; no port mapping, no proxy. [N13]
+217. **A NetworkPolicy meant 'Prometheus in monitoring' admits all of monitoring. What's the YAML mistake?** (M) - two `from` items = OR; one item with namespaceSelector + podSelector = AND; `kubectl describe networkpolicy` shows the sources. [X05]
+218. **Pods hang in ContainerCreating: 'No IPs available in pools'. Diagnosis?** (S) - Calico IPAM pool exhausted (namespace/pod pool annotation, small CIDR); pool CIDRs are immutable - add a pool; blocks and strictAffinity; also host-local podCIDR exhaustion. [X08]
+219. **You must grow a StatefulSet's volumes. The template change is forbidden - now what?** (M) - expand each PVC (allowVolumeExpansion), then `delete sts --cascade=orphan` and re-apply the template; FileSystemResizePending for block storage. [V06]
+220. **A fail-closed admission webhook blocks a namespace. Triage?** (S) - webhook Service endpoints (readiness, scheme HTTP vs HTTPS), timeoutSeconds, namespaceSelector blast radius; never flip to Ignore as the fix; `--dry-run=server` exercises webhooks. [A09]
+221. **'My manifest says X, the pod says Y' - name the usual suspects.** (M) - mutating webhooks (sidecar injectors, proxy injectors), LimitRange defaults, PodPreset-likes; compare the Deployment template with the Pod; NO_PROXY for in-cluster traffic. [A10]
+222. **`kubectl apply --server-side` fails with a conflict. What does it mean and how do you resolve it properly?** (S) - field ownership in managedFields; another applier owns the field with a different value; take over once with `--force-conflicts` or let the other manager release; Update operations never conflict. [O10]
+223. **A CRD version was set to `served: false` and clients broke. What else must happen before removing it?** (S) - serve it again; storage migration (rewrite objects / StorageVersionMigrator); then trim `status.storedVersions`; conversion webhooks for schema changes. [O11]
+224. **Argo CD pruned a PVC with prune enabled. How do you get the data back and prevent it?** (S) - Retain reclaim policy keeps the PV Released; reserve it via `claimRef` {namespace, name} (or `volumeName`) and recreate the PVC; `Prune=false` / `helm.sh/resource-policy: keep` on stateful objects. [D12]
+225. **A Secret flips between two values every few seconds. What do you suspect with ESO?** (M) - two ExternalSecrets writing the same target with `creationPolicy: Merge`; one writer with `Owner`; GitOps self-heal brings back deleted ones - fix in Git. [Y08]
+226. **'can't start new thread' on one node only.** (M) - kubelet `podPidsLimit` (pids cgroup counts threads), `pids.peak`, RLIMIT_NPROC; size from real workloads; recreate pods after changing it. [R07]
+227. **Pod-to-pod works on the same node but not across nodes.** (S) - the overlay: VXLAN 4789/udp (Calico), IP-in-IP, WireGuard, BGP; host firewalls and security groups, MTU; the node's tunnel endpoint address. [N12, X07]
+228. **New pods on one node stay ContainerCreating with a sandbox image error.** (M) - containerd's pinned sandbox (pause) image unreachable; check `crictl info` / config.toml; air-gapped mirrors must include pause. [L07]
+229. **A node flaps Ready/NotReady while SSH is fine.** (S) - lease renewals failing to the API endpoint (loss, LB, conntrack, MTU); node-monitor grace period; `tc -s qdisc`, kubelet logs; flapping is worse than down. [L08]
+230. **`df` says the disk is full, `du` finds nothing. DiskPressure evicts pods.** (M) - a deleted file held open (`lsof +L1`, /proc/*/fd); stop/disable the process (or truncate via /proc); eviction thresholds and the 5-min pressure transition period. [L17]
+231. **Random connect timeouts from pods on one node under load.** (S) - conntrack table full (`dmesg`, `nf_conntrack_count/max`, `conntrack -S`); kube-proxy sets the limit at start, a later sysctl wins; TIME_WAIT entries. [L18]
+232. **A new Service works from every node except one; old Services work everywhere.** (S) - kube-proxy not running there (stale rules stay), DaemonSet affinity/tolerations; `iptables-save | grep <svc>`. [N11]
+233. **Who read a Secret / who deleted an object? How do you answer it?** (M) - the audit log (policy levels, Secrets at Metadata only), jq over events: user, `user.extra` pod name for bound SA tokens, userAgent, responseStatus; events don't record deletes; ship logs off the node. [A13, O09]
+234. **etcd's data dir was moved and the control plane is down. What three places must agree?** (S) - `--data-dir`, volumeMount, hostPath; `type: Directory` instead of DirectoryOrCreate prevents an empty etcd; copy with ownership, 0700. [K05]
+235. **Walk me through restoring a deleted namespace from an etcd snapshot - including what people forget.** (S) - restore into a new data dir and point the hostPath at it; restart the API server; then restart every kubelet and the node agents (their watches stall on the rewound store) and force-delete the ghost pods the snapshot brought back; volume data is not in etcd (Retain!). [K06, B06]
+236. **Certificates were renewed minutes ago and are already expired. How?** (S) - kubeadm v1beta4 `certificateValidityPeriod`; renew with a config without it, restart static pods, fix kubeadm-config so upgrades don't repeat it; the CA has its own period; kubelet client certs rotate separately. [K07]
+237. **Writes fail: 'mvcc: database space exceeded'. Recovery order?** (S) - raise the quota (etcd restarts, the alarm persists), delete junk, compact, defrag, `alarm disarm`; `endpoint health` is unhealthy while an alarm is active; monitor db size vs quota. [K11]
+238. **Approved CSRs never get certificates.** (M) - approval != signing; the csrsigning controller needs `--cluster-signing-cert/key-file`; kubelet serving certs need manual approval. [K12]
+239. **Encryption at rest: the API server won't start / old Secrets are still plaintext.** (S) - the config file must be mounted into the static pod; aescbc keys 16/24/32 bytes; first provider writes; rewrite all Secrets; key rotation dance; KMS v2. [K16]
+240. **Upgrade a kubeadm cluster with zero downtime - and why do drains hang?** (S) - control plane first, one node at a time, skew rules; PDB with 0 allowed disruptions blocks eviction forever; replicas spread, readiness, preStop. [K13]
+241. **Every SealedSecret stopped decrypting after a 'cleanup'. What now?** (M) - the sealing key Secrets were deleted -> new key; restore the backup and restart the controller (it loads all keys); back up the key off-cluster. [Y02]
+242. **After a DR 'rebuild' nothing reconciles in a GitOps cluster. How do you order the recovery?** (S) - by dependency: secret store unsealed -> repo credentials -> root app revision -> sealing key -> refresh and force-sync; Git is the source of truth, nothing re-sealed. [B07]
 
 Sources used for the selection: CKA curriculum (Linux Foundation, Feb 2025 changes),
 Killer Shell/Killercoda CKA troubleshooting drills, techinterview.org "what interviewers ask past

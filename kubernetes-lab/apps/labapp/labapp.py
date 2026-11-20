@@ -1498,6 +1498,81 @@ def cmd_ship_logs(args):
         time.sleep(0.5)
 
 
+# --------------------------------------------------------------------------- admission webhook
+def admission_response(review):
+    """AdmissionReview v1 in -> AdmissionReview v1 out, per WEBHOOK_MODE (validate | mutate)."""
+    req = review.get("request") or {}
+    obj = req.get("object") or {}
+    meta = obj.get("metadata") or {}
+    resp = {"uid": req.get("uid", ""), "allowed": True}
+    mode = env("WEBHOOK_MODE", "validate")
+    deny = env("WEBHOOK_DENY_LABEL")          # "key=value": reject objects carrying this label
+    if deny:
+        k, _, v = deny.partition("=")
+        if (meta.get("labels") or {}).get(k) == v:
+            resp["allowed"] = False
+            resp["status"] = {"code": 403, "message": env("WEBHOOK_DENY_MESSAGE", f"label {deny} is not allowed")}
+    if mode == "mutate" and resp["allowed"] and req.get("kind", {}).get("kind") == "Pod":
+        tmpl = env("WEBHOOK_PATCH")           # JSONPatch; "{c}" = each container index
+        if tmpl:
+            ops = []
+            for i, _ in enumerate((obj.get("spec") or {}).get("containers") or []):
+                ops += json.loads(tmpl.replace("{c}", str(i)))
+            resp["patchType"] = "JSONPatch"
+            resp["patch"] = base64.b64encode(json.dumps(ops).encode()).decode()
+    log("info", "admission", mode=mode, op=req.get("operation"), kind=req.get("kind", {}).get("kind"),
+        namespace=req.get("namespace"), name=meta.get("name") or meta.get("generateName"), allowed=resp["allowed"])
+    return {"apiVersion": "admission.k8s.io/v1", "kind": "AdmissionReview", "response": resp}
+
+
+class WebhookHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *_):  # the admission log line is enough
+        pass
+
+    def reply(self, code, body, ctype="application/json"):
+        data = body if isinstance(body, bytes) else json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):  # noqa: N802
+        if self.path in ("/healthz", "/ready"):
+            self.reply(200, b"ok\n", "text/plain")
+        else:
+            self.reply(404, b"not found\n", "text/plain")
+
+    def do_POST(self):  # noqa: N802
+        try:
+            review = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        except ValueError as e:
+            log("warn", "admission: bad request body", error=str(e))
+            self.reply(400, {"error": "AdmissionReview JSON expected"})
+            return
+        time.sleep(env_float("WEBHOOK_DELAY_SECONDS", 0))
+        self.reply(200, admission_response(review))
+
+
+def cmd_webhook(args):
+    import http.server
+    cert, key = env("TLS_CERT_FILE"), env("TLS_KEY_FILE")
+    if not cert:
+        fatal("webhook: TLS_CERT_FILE (and TLS_KEY_FILE) are required - the API server only calls https")
+    port = args.port or env_int("PORT", 8443)
+    try:
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(cert, key or None)
+        srv = http.server.ThreadingHTTPServer(("0.0.0.0", port), WebhookHandler)
+        srv.socket = tls.wrap_socket(srv.socket, server_side=True)
+    except (OSError, ssl.SSLError) as e:
+        fatal(f"webhook: cannot serve https on :{port}: {e}")
+    log("info", f"labapp {VERSION} admission webhook ({env('WEBHOOK_MODE', 'validate')}) on :{port}")
+    srv.serve_forever()
+
+
 def main(argv):
     p = argparse.ArgumentParser(prog="labapp", description="kubernetes-lab demo service")
     sub = p.add_subparsers(dest="cmd")
@@ -1532,6 +1607,8 @@ def main(argv):
     sl.add_argument("file")
     rs = sub.add_parser("read-secret", help="read a Secret via the Kubernetes API, print its key names")
     rs.add_argument("secret", help="[namespace/]name")
+    wh = sub.add_parser("webhook", help="admission webhook over https (WEBHOOK_MODE=validate|mutate)")
+    wh.add_argument("--port", type=int, help="listen port (default PORT or 8443)")
     sub.add_parser("version")
 
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):
@@ -1544,7 +1621,8 @@ def main(argv):
         print(f"labapp {VERSION}")
         return 0
     return {"migrate": cmd_migrate, "get": cmd_get, "load": cmd_load, "wait-for": cmd_wait_for,
-            "ship-logs": cmd_ship_logs, "read-secret": cmd_read_secret}[args.cmd](args)
+            "ship-logs": cmd_ship_logs, "read-secret": cmd_read_secret,
+            "webhook": cmd_webhook}[args.cmd](args)
 
 
 if __name__ == "__main__":

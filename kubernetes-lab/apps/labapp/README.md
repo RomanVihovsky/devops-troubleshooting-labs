@@ -21,6 +21,7 @@ Listens on **8080**. Runs as **uid 10001** (gid 0). Python is PID 1 and handles 
 | `1.5` | `APP_VERSION=1.5 REQUIRED_ENV=SESSION_SECRET` | broken release: exits 1 "required setting SESSION_SECRET is not set" (W01, W11) |
 | `1.4-root` | `APP_UID=0` | image runs as root: `runAsNonRoot` rejects it (A05) |
 | `2.0.0-rc1` | `APP_VERSION=2.0.0-rc1 REQUIRED_ENV=FEATURE_FLAGS_URL` | release candidate that exits 1 on start (D03) |
+| `1.7` | `APP_VERSION=1.7` | the first tag with `labapp webhook`; pushed alone (`./lab images build 1.7`) so the older tags keep their digests (A09, A10) |
 
 P03 (`exec format error`) needs an arm64 image under an amd64 tag. `build.sh` doesn't make one (no
 emulation on this host): `lab/labapp:1.6` is the arm64 `python:3.12.16-slim`, copied by gw's `sync.sh`
@@ -155,3 +156,17 @@ or nslookup; use these instead:
 | `labapp ship-logs FILE` | sidecar: follow a file to stdout, survives rotation (P14 Q01) |
 | `labapp read-secret [NS/]NAME` | read a Secret via the API with the pod's ServiceAccount, print key names only; exit 1 with the API error (A12 as a Job) |
 | `labapp version` | print the version |
+
+## Admission webhook (`labapp webhook`, tag 1.7+)
+
+`labapp webhook [--port N]` answers AdmissionReview v1 over **https only** (the API server calls nothing
+else): `TLS_CERT_FILE` / `TLS_KEY_FILE` are required, the port is `PORT` or 8443. `GET /healthz` is 200.
+Every review is logged (`admission mode=... op=... kind=... namespace=... name=... allowed=...`).
+
+| Variable | Default | Effect | Rows |
+|---|---|---|---|
+| `WEBHOOK_MODE` | `validate` | `validate` = allow (unless denied below); `mutate` = also patch Pods with `WEBHOOK_PATCH` | A09 A10 |
+| `WEBHOOK_DENY_LABEL` | - | `key=value`: reject objects with this label (403, `WEBHOOK_DENY_MESSAGE`) | A09 |
+| `WEBHOOK_PATCH` | - | JSONPatch applied once per container; `{c}` is the container index, e.g. `[{"op":"add","path":"/spec/containers/{c}/env","value":[...]}]` | A10 |
+| `WEBHOOK_DELAY_SECONDS` | `0` | answer late (a webhook slower than its `timeoutSeconds`) | |
+

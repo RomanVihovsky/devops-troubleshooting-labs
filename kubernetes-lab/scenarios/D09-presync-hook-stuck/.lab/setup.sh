@@ -1,5 +1,5 @@
-# D09: billing's migration is a PreSync hook (helm pre-install/pre-upgrade) that needs Secret db-creds, which
-# the chart's SealedSecret only creates in the Sync phase
+# D09: billing's migration is a PreSync hook (helm pre-install/pre-upgrade) that needs the chart's settings
+# ConfigMap - a Sync-phase object
 kns billing
 # the platform team's chart release of the week: annotations for the settings ConfigMap (hooks, waves)
 gitops_commit "labapp chart: config.annotations for the settings ConfigMap" "dev-platform" <<'SNIP'
@@ -8,25 +8,15 @@ awk '{ print } !done && /include "labapp.labels"/ { print "  {{- with .Values.co
 sed -i '0,/^config:$/s//config:\n  annotations: {}                     # on the settings ConfigMap, e.g. Argo CD hook\/sync-wave/' charts/labapp/values.yaml
 grep -q 'Values.config.annotations' "$f" && grep -q '^  annotations: {}  ' charts/labapp/values.yaml
 SNIP
-pw=$(rand)
-sealed=$(printf %s "$pw" | "$BIN_DIR/kubeseal" --raw --cert "$SEALED_CERT" --scope strict --namespace billing --name db-creds --from-file=/dev/stdin)
-remember db_password "$pw"
-gitops_commit "billing: new service (schema migration before every release)" <<SNIP
+gitops_commit "billing: new service (schema migration before every release)" <<'SNIP'
 mkdir -p envs/billing
 cat > envs/billing/values.yaml <<'YML'
-# billing: the migration runs BEFORE the new version (PreSync); it needs the DB password
+# billing: the migration runs BEFORE the new version (PreSync); it reads the app's settings (ConfigMap)
 fullnameOverride: billing
 serviceAccount:
   create: false          # the namespace's default ServiceAccount (exists before any phase)
-secrets:
-  source: sealedSecret
-  name: db-creds
-  env:
-    DATABASE_PASSWORD: password
-  sealedSecret:
-    scope: strict
-    encryptedData:
-      password: $sealed
+app:
+  logLevel: info
 migrations:
   enabled: true
   hook: pre-install,pre-upgrade

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: checkout
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: checkout-api}
+  strategy:
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  template:
+    metadata:
+      labels: {app: checkout-api}
+    spec:
+      containers:
+        - name: api
+          image: registry.lab:5000/lab/labapp:1.4
+          env:
+            - {name: APP_NAME, value: checkout-api}
+            - {name: SHUTDOWN_MODE, value: immediate}   # fast pod turnover for the deploy pipeline
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /ready, port: 8080}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-api
+  namespace: checkout
+spec:
+  selector: {app: checkout-api}
+  ports: [{port: 8080, targetPort: 8080}]

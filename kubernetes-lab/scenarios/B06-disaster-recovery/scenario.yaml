@@ -1,0 +1,10 @@
+id: B06
+title: 'Disaster recovery: the API is down and prod is gone'
+kind: incident
+level: 3
+domain: boss
+wave: 3
+est: 60m
+reset: cluster
+timed: false
+namespaces: []

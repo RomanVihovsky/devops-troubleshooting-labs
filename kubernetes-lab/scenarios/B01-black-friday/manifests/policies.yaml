@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: bf}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-from-anywhere, namespace: bf}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: [Ingress]
+  ingress: [{ports: [{port: 8080}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-to-catalog, namespace: bf}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: [Egress]
+  egress: [{to: [{podSelector: {matchLabels: {app: catalog}}}], ports: [{port: 8080}]}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: catalog-from-web, namespace: bf}
+spec:
+  podSelector: {matchLabels: {app: catalog}}
+  policyTypes: [Ingress]
+  ingress: [{from: [{podSelector: {matchLabels: {app: web}}}], ports: [{port: 8080}]}]

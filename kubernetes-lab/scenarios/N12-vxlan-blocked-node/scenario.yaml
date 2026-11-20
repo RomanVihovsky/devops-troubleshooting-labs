@@ -1,0 +1,10 @@
+id: N12
+title: Pods on k8s-w3 can't talk to pods on other nodes
+kind: incident
+level: 3
+domain: network
+wave: 3
+est: 25m
+reset: node
+nodes: [w3]
+namespaces: [meshcheck]

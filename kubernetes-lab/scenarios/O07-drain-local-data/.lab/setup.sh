@@ -5,7 +5,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata: {name: cache, namespace: maint}
 spec:
-  replicas: 2
+  replicas: 3                    # one per worker (required anti-affinity): one is always on k8s-w2
   selector: {matchLabels: {app: cache}}
   template:
     metadata: {labels: {app: cache}}
@@ -46,13 +46,7 @@ spec:
       command: ["sh", "-c", "while true; do sleep 3600; done"]
 YML
 wait_rollout maint deploy/cache
-cachepod=$(kx -n maint get pods -l app=cache --field-selector spec.nodeName=k8s-w2 -o jsonpath='{.items[0].metadata.name}')
-if [ -z "$cachepod" ]; then   # make sure one cache pod lands on w2
-  kx -n maint delete pod -l app=cache --field-selector spec.nodeName=k8s-w1 --wait=false >/dev/null 2>&1
-  w2() { [ -n "$(kx -n maint get pods -l app=cache --field-selector spec.nodeName=k8s-w2 -o name)" ]; }
-  retry 60 w2 || true
-  cachepod=$(kx -n maint get pods -l app=cache --field-selector spec.nodeName=k8s-w2 -o jsonpath='{.items[0].metadata.name}')
-fi
+cachepod=$(kx -n maint get pods -l app=cache --field-selector spec.nodeName=k8s-w2 -o jsonpath='{.items[*].metadata.name}')
 [ -n "$cachepod" ] || die "no cache pod on k8s-w2"
 remember o07_cache "$cachepod"
 retry 60 kx -n maint wait --for=condition=Ready pod/scratch --timeout=5s || die "scratch not running"

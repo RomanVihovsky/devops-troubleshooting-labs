@@ -1,0 +1,9 @@
+id: B03
+title: Onboard team payments - nothing they deploy works
+kind: incident
+level: 3
+domain: boss
+wave: 3
+est: 45m
+reset: ns
+namespaces: [payments-team]

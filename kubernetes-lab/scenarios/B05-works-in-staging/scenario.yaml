@@ -1,0 +1,9 @@
+id: B05
+title: '"Works in staging" - the same manifests fail in prod'
+kind: incident
+level: 3
+domain: boss
+wave: 3
+est: 40m
+reset: ns
+namespaces: [web-staging, web-prod]

@@ -1,0 +1,10 @@
+id: D12
+title: After a cleanup commit the notes service came back empty
+kind: incident
+level: 3
+domain: delivery
+wave: 3
+est: 30m
+reset: ns
+namespaces: [notes]
+gitops: true
